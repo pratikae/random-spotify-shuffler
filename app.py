@@ -23,9 +23,10 @@ def login():
     auth_url = sp_oauth.get_authorize_url()
     return redirect(auth_url)
 
+queue_scheduler = BackgroundScheduler()
+
 @app.route("/callback")
 def callback():
-    scheduler = BackgroundScheduler()
     code = request.args.get("code")
     token_info = sp_oauth.get_access_token(code)
     sp = spotipy.Spotify(auth=token_info['access_token'])
@@ -40,31 +41,63 @@ def callback():
             print("thats not a valid choice, dummy \n")
 
     if user__choice == "1":
+        print("loading")
         track_uris = get_saved_songs(sp)
+        playlist_name = "liked songs"
     elif user__choice == "2":
+        print("loading")
         playlist_name, playlist_id = user_choice_playlist(get_playlists(sp))
         while playlist_name is None:
             playlist_name, playlist_id = user_choice_playlist(get_playlists(sp))
         track_uris = get_songs(sp, playlist_id)
     elif user__choice == "3":
+        print("loading")
         playlist_name, playlist_id = get_random_playlist(sp)
         track_uris = get_songs(sp, playlist_id)
 
     random.shuffle(track_uris)
 
+    return start_playback_with_queue(sp, track_uris=track_uris, device_id=device_id, playlist_name=playlist_name, queue_scheduler=queue_scheduler)
+
+def reset_scheduler():
+    if queue_scheduler.running:
+        queue_scheduler.remove_all_jobs()
+    else:
+        queue_scheduler.start()
+
+curr_index = 0
+
+def start_playback_with_queue(sp: spotipy.Spotify, track_uris, device_id, playlist_name, queue_scheduler):
+    continue_true = 0
+    while (continue_true != "1"):
+        continue_true = input("please clear queue before proceding, enter 1 once you are ready: ")
+    
     sp.start_playback(uris=[track_uris[0]], device_id=device_id)
-
-    for i, track_uri in enumerate(track_uris[1:]):
-        if i % 50 == 49:
-            print("at sleep")
-            time.sleep(30)
+    global curr_index
+    curr_index = 1
+    for track_uri in track_uris[1:51]:
         sp.add_to_queue(uri=track_uri, device_id=device_id)
+        curr_index += 1
 
-    return "randomly shuffling " + playlist_name
+    reset_scheduler()
+    queue_scheduler.add_job(
+        func=check_queue,
+        args=[sp, track_uris, device_id],
+        trigger="interval",
+        seconds=15
+    )
 
-# def check_queue(sp: spotipy.Spotify):
-#     if (len(sp.queue()) < 50):
-#         need to check the last queued song and add the next to the queue 
+    return f"randomly shuffling {playlist_name}"
+
+def check_queue(sp: spotipy.Spotify, track_uris, device_id):
+    global curr_index
+    current_queue = sp.queue()
+    queue_length = len(current_queue.get("queue", [])) + 1
+
+    while queue_length < 50 and curr_index < len(track_uris):
+        sp.add_to_queue(uri=track_uris[curr_index], device_id=device_id)
+        curr_index += 1
+        queue_length += 1
         
 def get_random_playlist(sp: spotipy.Spotify):
     playlists = get_playlists(sp)
@@ -109,11 +142,10 @@ def get_songs(sp: spotipy.Spotify, playlist_id: str):
     track_items.extend(results['items'])
 
     while results['next']:
-        num_songs += len(results['items'])
+        results = sp.next(results)
         track_items.extend(results['items'])
 
-    track_uris = [t['track']['uri'] for t in track_items if t['track']]
-    return track_uris
+    return [t['track']['uri'] for t in track_items if t['track']]
 
 def get_saved_songs(sp: spotipy.Spotify):
     track_items = []
@@ -124,9 +156,7 @@ def get_saved_songs(sp: spotipy.Spotify):
         results = sp.next(results)
         track_items.extend(results['items'])
 
-    track_uris = [t['track']['uri'] for t in track_items if t['track']]
-    return track_uris
+    return [t['track']['uri'] for t in track_items if t['track']]
     
-
 if __name__ == "__main__":
     app.run(port=8888, debug=True)
