@@ -39,60 +39,35 @@ def callback():
     else:
         return("user did not give permision to cache, unable to shuffle")
 
-    shuffle_choice = 0
-    while shuffle_choice != "1" and shuffle_choice != "2" and shuffle_choice != "3":
-        shuffle_choice = input("enter 1 for liked songs, 2 to choose a playlist from your library, 3 for a random playlist: ")
-        if shuffle_choice != "1" and shuffle_choice != "2" and shuffle_choice != "3":
-            print("thats not a valid choice, dummy \n")
-    
-    if shuffle_choice == "1":
-        track_uris = user_cache["saved_songs"]
-        playlist_name = "liked songs"
-    elif shuffle_choice == "2":
-        playlist_name, playlist_id = user_choice_playlist()
-        while playlist_name is None:
+    user_choice = input("would you like to shuffle? 1 if yes, 0 if no: ")
+    while user_choice != 0:
+        shuffle_choice = 0
+        while shuffle_choice != "1" and shuffle_choice != "2" and shuffle_choice != "3":
+            shuffle_choice = input("enter 1 for liked songs, 2 to choose a playlist from your library, 3 for a random playlist: ")
+            if shuffle_choice != "1" and shuffle_choice != "2" and shuffle_choice != "3":
+                print("thats not a valid choice, dummy \n")
+        
+        if shuffle_choice == "1":
+            track_uris = user_cache["saved_songs"]
+            playlist_name = "liked songs"
+        elif shuffle_choice == "2":
             playlist_name, playlist_id = user_choice_playlist()
-        track_uris = user_cache["playlists"][playlist_id]["tracks"]
-    elif shuffle_choice == "3":
-        playlist_id = random.choice(list(user_cache["playlists"].keys()))
-        playlist_name = user_cache["playlists"][playlist_id]["name"]
-        track_uris = user_cache["playlists"][playlist_id]["tracks"]
+            while playlist_name is None:
+                playlist_name, playlist_id = user_choice_playlist()
+            track_uris = user_cache["playlists"][playlist_id]["tracks"]
+        elif shuffle_choice == "3":
+            playlist_id = random.choice(list(user_cache["playlists"].keys()))
+            playlist_name = user_cache["playlists"][playlist_id]["name"]
+            track_uris = user_cache["playlists"][playlist_id]["tracks"]
 
-    random.shuffle(track_uris)
+        random.shuffle(track_uris)
 
-    return start_playback_with_queue(sp, track_uris=track_uris, device_id=device_id, playlist_name=playlist_name, queue_scheduler=queue_scheduler)
+        start_playback_with_queue(sp, track_uris=track_uris, device_id=device_id, playlist_name=playlist_name, queue_scheduler=queue_scheduler)
+        print("must wait 60 seconds so you don't get rate limited")
+        time.sleep(60)
+        user_choice = input("shuffle again? 1 if yes, 0 if no: ")
 
-    # buggy code for allowing multiple shuffles in one use so you dont have to cache each time
-    # - runs into a rate limit at like immediate second shuffle, 
-    #   most likely because trying to queue 100 songs in less than a minute (50 from each shuffle)
-
-    # user_choice = input("would you like to shuffle? 1 if yes, 0 if no: ")
-    #     while user_choice != 0:
-    #         shuffle_choice = 0
-    #         while shuffle_choice != "1" and shuffle_choice != "2" and shuffle_choice != "3":
-    #             shuffle_choice = input("enter 1 for liked songs, 2 to choose a playlist from your library, 3 for a random playlist: ")
-    #             if shuffle_choice != "1" and shuffle_choice != "2" and shuffle_choice != "3":
-    #                 print("thats not a valid choice, dummy \n")
-            
-    #         if shuffle_choice == "1":
-    #             track_uris = user_cache["saved_songs"]
-    #             playlist_name = "liked songs"
-    #         elif shuffle_choice == "2":
-    #             playlist_name, playlist_id = user_choice_playlist()
-    #             while playlist_name is None:
-    #                 playlist_name, playlist_id = user_choice_playlist()
-    #             track_uris = user_cache["playlists"][playlist_id]["tracks"]
-    #         elif shuffle_choice == "3":
-    #             playlist_id = random.choice(list(user_cache["playlists"].keys()))
-    #             playlist_name = user_cache["playlists"][playlist_id]["name"]
-    #             track_uris = user_cache["playlists"][playlist_id]["tracks"]
-
-    #         random.shuffle(track_uris)
-
-    #         start_playback_with_queue(sp, track_uris=track_uris, device_id=device_id, playlist_name=playlist_name, queue_scheduler=queue_scheduler)
-    #         user_choice = input("shuffle again? 1 if yes, 0 if no: ")
-
-    #     return("thank you!")
+    return("thank you!")
 
 user_cache = {
     "saved_songs": [],
