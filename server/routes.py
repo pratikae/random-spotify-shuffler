@@ -153,17 +153,20 @@ def api_cache_refresh():
 
 @routes.route("/api/cache/clear", methods=["POST"])
 def api_cache_clear():
-    user = db.query(User).filter_by(id=user_id).first()
-    if user:
-        db.delete(user)
-        db.commit()
-        
+    data = request.get_json()
+    user_id = data.get("user_id")
+    if not user_id:
+        return jsonify({"error": "no user_id"}), 400
+
     db = SessionLocal()
-    user_cache = db.query(spotify_helpers.UserCache).filter_by(user_id=user_id).first()
-    if user_cache:
-        db.delete(user_cache)
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        for playlist in user.playlists:
+            db.delete(playlist)
+        user.saved_tracks.clear()
         db.commit()
     db.close()
+
     return jsonify({"message": "cache cleared"})
 
 @routes.route("/api/revoke", methods=["POST"])
