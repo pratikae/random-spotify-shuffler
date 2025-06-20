@@ -3,12 +3,11 @@ import random
 import spotipy
 import spotify_helpers
 from app import queue_scheduler
-from database import SessionLocal
+from database import SessionLocal, User, Playlist, Track
 from spotify_helpers import load_user_cache
 
-routes = Blueprint("routes", __name__)
 
-# need to rewrite these to account for new database structure
+routes = Blueprint("routes", __name__)
 
 def get_spotify_client(code=None, token=None):
     if token:
@@ -43,39 +42,49 @@ def callback():
 
     return jsonify({"message": "Callback success", "user_id": user_id})
 
-@routes.route("/api/playlists")
+@routes.route("/api/get_playlists", methods="GET")
 def api_get_playlists():
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"error": "no user_id"}), 400
 
-    cache = load_user_cache(user_id)
-    if not cache:
-        return jsonify({"error": "no cache found"}), 404
+    db = SessionLocal()
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        db.close()
+        return jsonify({"error": "user not found"}), 404
 
     playlists = [
         {
-            "id": pid,
-            "name": p["name"],
-            "num_tracks": len(p["tracks"])
+            "id": playlist.id,
+            "name": playlist.name,
+            "num_tracks": len(playlist.tracks)
         }
-        for pid, p in cache["playlists"].items()
+        for playlist in user.playlists
     ]
+    db.close()
     return jsonify(playlists)
 
-@routes.route("/api/saved_songs")
+@routes.route("/api/get_saved_songs", methods="GET")
 def api_get_saved_songs():
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"error": "no user_id"}), 400
 
-    cache = load_user_cache(user_id)
-    if not cache:
-        return jsonify({"error": "no cache found"}), 404
+    db = SessionLocal()
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        db.close()
+        return jsonify({"error": "user not found"}), 404
 
+    tracks = [
+        {"id": t.id, "name": t.name, "album": t.album.name if t.album else None}
+        for t in user.saved_tracks
+    ]
+    db.close()
     return jsonify({
-        "num_saved_songs": len(cache["saved_songs"]),
-        "tracks": cache["saved_songs"]
+        "num_saved_songs": len(tracks),
+        "tracks": tracks
     })
 
 @routes.route("/api/shuffle", methods=["POST"])
@@ -88,9 +97,11 @@ def api_shuffle():
     if not user_id or not shuffle_choice:
         return jsonify({"error": "no required fields"}), 400
 
-    cache = load_user_cache(user_id)
-    if not cache:
-        return jsonify({"error": "no cache found"}), 404
+    db = SessionLocal()
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        db.close()
+        return jsonify({"error": "user not found"}), 404
 
     devices = sp.devices().get("devices", [])
     if not devices:
@@ -99,19 +110,25 @@ def api_shuffle():
     device_id = devices[0]["id"]
 
     if shuffle_choice == "1":
-        track_uris = cache["saved_songs"]
+        track_uris = [t.id for t in user.saved_tracks]
         playlist_name = "liked songs"
     elif shuffle_choice == "2":
         playlist_id = data.get("playlist_id")
-        if playlist_id not in cache["playlists"]:
+        playlist = db.query(Playlist).filter_by(id=playlist_id, user_id=user_id).first()
+        if not playlist:
+            db.close()
             return jsonify({"error": "invalid playlist_id"}), 404
-        playlist_name = cache["playlists"][playlist_id]["name"]
-        track_uris = cache["playlists"][playlist_id]["tracks"]
+        playlist_name = playlist.name
+        track_uris = [t.id for t in playlist.tracks]
     elif shuffle_choice == "3":
-        playlist_id = random.choice(list(cache["playlists"].keys()))
-        playlist_name = cache["playlists"][playlist_id]["name"]
-        track_uris = cache["playlists"][playlist_id]["tracks"]
+        if not user.playlists:
+            db.close()
+            return jsonify({"error": "no playlists"}), 400
+        playlist = random.choice(user.playlists)
+        playlist_name = playlist.name
+        track_uris = [t.id for t in playlist.tracks]
     else:
+        db.close()
         return jsonify({"error": "invalid shuffle_choice"}), 400
 
     random.shuffle(track_uris)
@@ -136,8 +153,11 @@ def api_cache_refresh():
 
 @routes.route("/api/cache/clear", methods=["POST"])
 def api_cache_clear():
-    data = request.get_json()
-    user_id = data.get("user_id")
+    user = db.query(User).filter_by(id=user_id).first()
+    if user:
+        db.delete(user)
+        db.commit()
+        
     db = SessionLocal()
     user_cache = db.query(spotify_helpers.UserCache).filter_by(user_id=user_id).first()
     if user_cache:

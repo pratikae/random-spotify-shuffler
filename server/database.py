@@ -30,6 +30,7 @@ class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True, index=True)
     name = Column(String)
+    curr_index = Column(Integer, default=0)
 
     playlists = relationship("Playlist", back_populates="user")
     saved_tracks = relationship("Track", secondary=saved_track_table, back_populates="saved_by_users")
