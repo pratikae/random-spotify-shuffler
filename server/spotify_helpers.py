@@ -6,14 +6,12 @@ from sqlalchemy.orm.exc import NoResultFound
 def cache_user(sp, user_id):
     db = SessionLocal()
     
-    # first check if user exists, create user if not
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         user = User(id=user_id)
         db.add(user)
         db.commit()
         
-    # add user data to database tables
     saved_tracks = get_saved_songs(sp)
     playlists_data = get_playlists(sp)
 
