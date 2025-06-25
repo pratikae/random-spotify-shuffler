@@ -1,13 +1,55 @@
-import React from "react";
-import Playlists from "./pages/Playlists";
+import React, { useState, useEffect } from "react";
+import Login from "./Login";
+import Menu from "./Menu";
+import Shuffler from "./Shuffler";
 
 function App() {
-  const userId = "31g6wvn3iktku5yluae55q3qmw5u?si=898f8268ec2e46df"; // my id rn
+  const [userId, setUserId] = useState(null);
+  const [displayName, setDisplayName] = useState(null);
+  const [accessToken, setAccessToken] = useState(null);
+  const [page, setPage] = useState("menu");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("user_id");
+    const name = params.get("display_name");
+    const token = params.get("token");
+
+    if (id && token) {
+      setUserId(id);
+      setDisplayName(name || id);
+      setAccessToken(token);
+      window.history.replaceState({}, document.title, "/");
+    }
+  }, []);
+
+  const handleLogout = () => {
+    setUserId(null);
+    setDisplayName(null);
+    setAccessToken(null); 
+    setPage("menu");
+  };
+
+  if (!userId) {
+    return <Login />;
+  }
+
+  if (page === "shuffler") {
+    return (
+      <Shuffler
+        userId={userId}
+        token={accessToken}
+        onBack={() => setPage("menu")}
+      />
+    );
+  }
+
   return (
-    <div>
-      <h1>Spotify Queue App</h1>
-      <Playlists userId={userId} />
-    </div>
+    <Menu
+      userName={displayName}
+      onLogout={handleLogout}
+      onNavigate={(page) => setPage(page)}
+    />
   );
 }
 

@@ -5,11 +5,15 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from spotipy.oauth2 import SpotifyOAuth
 from database import init_db
 from routes import routes
+from scheduler import queue_scheduler 
 
 load_dotenv()
 init_db()
 
 app = Flask(__name__)
+
+from flask_cors import CORS
+CORS(app)
 
 app.sp_oauth = SpotifyOAuth(
     scope="user-read-playback-state user-modify-playback-state playlist-read-private user-library-read",
@@ -18,8 +22,7 @@ app.sp_oauth = SpotifyOAuth(
     redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI")
 )
 
-app.queue_scheduler = BackgroundScheduler()
-app.queue_scheduler.start()
+queue_scheduler.start()
 
 app.register_blueprint(routes)
 

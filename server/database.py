@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, Table
+from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, Table, Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
@@ -63,12 +63,27 @@ class Track(Base):
     __tablename__ = "tracks"
     id = Column(String, primary_key=True)
     name = Column(String)
-    album_id = Column(String, ForeignKey("albums.id"))
+    album_id = Column(String, ForeignKey("albums.id"), nullable=True)
     
     album = relationship("Album", back_populates="tracks")
     artists = relationship("Artist", secondary=track_artist_table, back_populates="tracks")
     playlists = relationship("Playlist", secondary=playlist_track_table, back_populates="tracks")
     saved_by_users = relationship("User", secondary=saved_track_table, back_populates="saved_tracks")
+    
+class Show(Base):
+    __tablename__ = "shows"
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    episodes = relationship("PodcastEpisode", back_populates="show")
+
+class PodcastEpisode(Base):
+    __tablename__ = "podcast_episodes"
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    show_id = Column(String, ForeignKey("shows.id"))
+    release_date = Column(Date, nullable=True)
+
+    show = relationship("Show", back_populates="episodes")
 
 def init_db():
     Base.metadata.create_all(bind=engine)

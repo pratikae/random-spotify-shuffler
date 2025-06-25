@@ -2,9 +2,9 @@ from flask import Blueprint, request, jsonify, redirect, current_app
 import random
 import spotipy
 import spotify_helpers
-from app import queue_scheduler
+from scheduler import queue_scheduler
 from database import SessionLocal, User, Playlist, Track
-from spotify_helpers import load_user_cache
+from spotify_helpers import load_user_cache, cache_liked_songs, cache_playlists_async
 
 
 routes = Blueprint("routes", __name__)
@@ -13,7 +13,7 @@ def get_spotify_client(code=None, token=None):
     if token:
         return spotipy.Spotify(auth=token)
     elif code:
-        token_info = current_app.sp_oauth.get_access_token(code)
+        token_info = current_app.sp_oauth.get_access_token(code, as_dict=True)
         return spotipy.Spotify(auth=token_info['access_token'])
     else:
         raise Exception("no token or code given")
@@ -23,26 +23,30 @@ def login():
     auth_url = current_app.sp_oauth.get_authorize_url()
     return redirect(auth_url)
 
+from urllib.parse import quote
 @routes.route("/callback")
 def callback():
     code = request.args.get("code")
     if not code:
         return jsonify({"error": "no code param"}), 400
 
-    sp = get_spotify_client(code=code)
-    user_id = sp.me()["id"]
+    token_info = current_app.sp_oauth.get_access_token(code, as_dict=True)
+    access_token = token_info["access_token"]
 
-    cache_permission = request.args.get("cache_permission", "1")
-    if cache_permission != "1":
-        return jsonify({"error": "user didn't give permission to cache"}), 403
+    sp = spotipy.Spotify(auth=access_token)
+    user_info = sp.me()
+    user_id = user_info["id"]
+    display_name = user_info.get("display_name", user_id)
 
-    db = SessionLocal()
-    spotify_helpers.cache_user(sp, user_id)
-    db.close()
+    cache_liked_songs(sp, user_id)
+    cache_playlists_async(sp, user_id)
 
-    return jsonify({"message": "Callback success", "user_id": user_id})
+    return redirect(
+        f"http://localhost:3000/?user_id={user_id}&display_name={quote(display_name)}&token={access_token}"
+    )
 
-@routes.route("/api/get_playlists", methods="GET")
+
+@routes.route("/api/get_playlists", methods=["GET"])
 def api_get_playlists():
     user_id = request.args.get("user_id")
     if not user_id:
@@ -65,7 +69,7 @@ def api_get_playlists():
     db.close()
     return jsonify(playlists)
 
-@routes.route("/api/get_saved_songs", methods="GET")
+@routes.route("/api/get_saved_songs", methods=["GET"])
 def api_get_saved_songs():
     user_id = request.args.get("user_id")
     if not user_id:
