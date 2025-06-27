@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from "react";
-import Login from "./Login";
-import Menu from "./Menu";
-import Shuffler from "./Shuffler";
+import Login from "./Login.tsx";
+import Menu from "./Menu.tsx";
+import Shuffler from "./Shuffler.tsx";
 
-function App() {
-  const [userId, setUserId] = useState(null);
-  const [displayName, setDisplayName] = useState(null);
-  const [accessToken, setAccessToken] = useState(null);
-  const [page, setPage] = useState("menu");
+type Page = "menu" | "shuffler";
+
+const App: React.FC = () => {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [page, setPage] = useState<Page>("menu");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -26,7 +28,7 @@ function App() {
   const handleLogout = () => {
     setUserId(null);
     setDisplayName(null);
-    setAccessToken(null); 
+    setAccessToken(null);
     setPage("menu");
   };
 
@@ -46,11 +48,11 @@ function App() {
 
   return (
     <Menu
-      userName={displayName}
+      userName={displayName ?? ""}
       onLogout={handleLogout}
-      onNavigate={(page) => setPage(page)}
+      onNavigate={(page: Page) => setPage(page)}
     />
   );
-}
+};
 
 export default App;

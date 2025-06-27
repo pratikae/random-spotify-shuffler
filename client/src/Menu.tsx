@@ -1,6 +1,12 @@
 import React from "react";
 
-function Menu({ userName, onLogout, onNavigate }) {
+type MenuProps = {
+  userName: string;
+  onLogout: () => void;
+  onNavigate: (page: "shuffler") => void;
+};
+
+const Menu: React.FC<MenuProps> = ({ userName, onLogout, onNavigate }) => {
   return (
     <div style={{ textAlign: "center", marginTop: "100px" }}>
       <h2>welcome, {userName}</h2>
@@ -9,6 +15,6 @@ function Menu({ userName, onLogout, onNavigate }) {
       <button onClick={onLogout}>logout</button>
     </div>
   );
-}
+};
 
 export default Menu;

@@ -1,6 +1,6 @@
 import React from "react";
 
-function Login() {
+const Login: React.FC = () => {
   const handleLogin = () => {
     window.location.href = "http://localhost:8888/login";
   };
@@ -11,6 +11,6 @@ function Login() {
       <button onClick={handleLogin}>Login with Spotify</button>
     </div>
   );
-}
+};
 
 export default Login;

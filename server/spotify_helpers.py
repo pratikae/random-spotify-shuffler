@@ -26,33 +26,39 @@ import threading
 
 def cache_playlists_async(sp, user_id):
     def worker():
-        try:
-            db = SessionLocal()
-            user = db.query(User).filter_by(id=user_id).first()
-            if not user:
-                db.close()
-                return
+        db = SessionLocal()
+        user = db.query(User).filter_by(id=user_id).first()
+        if not user:
+            db.close()
+            return
 
-            playlists_data = get_playlists(sp)
+        playlists_data = get_playlists(sp)
+        
+        for playlist_obj in playlists_data:
+            playlist_id = playlist_obj["id"]
+            playlist = db.query(Playlist).filter_by(id=playlist_id).first()
+            if not playlist:
+                playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user)
+                db.add(playlist)
+                db.flush() 
 
-            for playlist_obj in playlists_data.values():
-                playlist_id = playlist_obj["id"]
-                playlist = db.query(Playlist).filter_by(id=playlist_id).first()
-                if not playlist:
-                    playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user)
-                    db.add(playlist)
+            playlist_tracks = get_songs(sp, playlist_id)
+            for track_data in playlist_tracks:
+                if not track_data or track_data.get("type") != "track":
+                    print(f"Skipping non-track or malformed item: {track_data}")
+                    continue
+                if not track_data.get("id"):
+                    print(f"Skipping track with missing ID: {track_data}")
+                    continue
 
-                playlist_tracks = get_songs(sp, playlist_id)
-                for track_data in playlist_tracks:
+                with db.no_autoflush:
                     track = get_or_create_track(track_data, db)
-                    if track not in playlist.tracks:
+                    if track and track not in playlist.tracks:
                         playlist.tracks.append(track)
 
-            db.commit()
-        except Exception as e:
-            print(f"error in async playlist caching: {e}")
-        finally:
-            db.close()
+                    
+        db.commit()
+        db.close()
 
     threading.Thread(target=worker).start()
     
@@ -79,14 +85,19 @@ def get_or_create_artist(artist_data, db):
     return artist
 
 def get_or_create_track(track_data, db):
-    if "episode" in track_data or track_data.get("type") == "episode":
+    if track_data.get("type") == "episode":
         return get_or_create_podcast_episode(track_data, db)
 
-    track = db.get(Track, track_data["id"])
+    track_id = track_data.get("id")
+    if not track_id:
+        print("Skipping track with missing ID:", track_data)
+        return None
+
+    track = db.get(Track, track_id)
     if not track:
         album = get_or_create_album(track_data["album"], db) if track_data.get("album") else None
         track = Track(
-            id=track_data["id"],
+            id=track_id,
             name=track_data["name"],
             album=album
         )
@@ -94,6 +105,7 @@ def get_or_create_track(track_data, db):
         for artist_data in track_data.get("artists", []):
             artist = get_or_create_artist(artist_data, db)
             track.artists.append(artist)
+        db.flush()
     return track
 
 def get_or_create_podcast_episode(episode_data, db):
@@ -116,6 +128,7 @@ def get_or_create_podcast_episode(episode_data, db):
         release_date=episode_data.get("release_date"),
     )
     db.add(episode)
+    db.flush() 
     return episode
 
 def get_or_create_show(show_data, db):
@@ -128,7 +141,6 @@ def get_or_create_show(show_data, db):
     show = Show(id=show_id, name=show_data.get("name"))
     db.add(show)
     return show
-
 
 def load_user_cache(user_id):
     db = SessionLocal()
@@ -204,8 +216,7 @@ def get_playlists(sp):
     while results['next']:
         results = sp.next(results)
         playlists.extend(results['items'])
-    playlists_dict = dict(enumerate(playlists))
-    return playlists_dict
+    return playlists  
     
 def get_songs(sp, playlist_id):
     items = []
