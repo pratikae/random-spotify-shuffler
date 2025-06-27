@@ -1,11 +1,10 @@
 random spotofy shuffler (and more to come??)
 
-- clone the repo in terminal:
-  - git clone https://github.com/your-username/spotify-random-shuffler.git
-  - cd spotify-random-shuffler
+- download code, open in vscode
+- install nodejs and python
 - backend, enter in terminal:
   - cd server
-  - install dependencies: pip install flask spotipy python-dotenv apscheduler
+  - install dependencies: pip install flask spotipy python-dotenv      apscheduler
   - create venv: python -m venv venv 
   - enter venv: source venv/bin/activate
   - create .env, get id and secrets from me:
@@ -15,7 +14,7 @@ random spotofy shuffler (and more to come??)
   - run app: python app.py
 - frontend, enter in terminal:
   - cd client
-  - install dependencies: react react-dom axios @types/react @types/react-dom
+  - install dependencies: npm install react axios
   - run app: npm run start
 
 login with your spotify account, and you are good to go!
