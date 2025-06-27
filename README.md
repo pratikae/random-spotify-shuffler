@@ -11,7 +11,7 @@ random spotofy shuffler (and more to come??)
   - create .env, get id and secrets from me:
     - SPOTIPY_CLIENT_ID=your_id_here
       SPOTIPY_CLIENT_SECRET=your_secret_here
-      SPOTIPY_REDIRECT_URI=http://localhost:8888/callback
+      SPOTIPY_REDIRECT_URI=http://127.0.0.1:8888/callback
   - run app: python app.py
 - frontend, enter in terminal:
   - cd client
