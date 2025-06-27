@@ -6,9 +6,8 @@ random spotofy shuffler (and more to come??)
 - backend, enter in terminal:
   - cd server
   - install dependencies: pip install flask spotipy python-dotenv apscheduler
-  - create venv:
-    - python -m venv venv 
-      source venv/bin/activate
+  - create venv: python -m venv venv 
+  - enter venv: source venv/bin/activate
   - create .env, get id and secrets from me:
     - SPOTIPY_CLIENT_ID=your_id_here
       SPOTIPY_CLIENT_SECRET=your_secret_here
