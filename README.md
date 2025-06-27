@@ -2,7 +2,7 @@ random spotofy shuffler (and more to come??)
 
 - clone the repo in terminal:
   - git clone https://github.com/your-username/spotify-random-shuffler.git
-    cd spotify-random-shuffler
+  - cd spotify-random-shuffler
 - backend, enter in terminal:
   - cd server
   - install dependencies: pip install flask spotipy python-dotenv apscheduler
