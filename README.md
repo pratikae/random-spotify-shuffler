@@ -1,4 +1,4 @@
-random spotify shuffler (and more to come??)
+spotify shuffler (and more to come??)
 
 - download code, open in vscode
 - install nodejs and python
