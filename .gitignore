@@ -1,6 +1,8 @@
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
+server/__pycache__/
+client/__pycache__/
 *.py[cod]
 *$py.class
 
