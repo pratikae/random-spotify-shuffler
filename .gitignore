@@ -1,8 +1,17 @@
+<<<<<<< HEAD
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
 server/__pycache__/
 client/__pycache__/
+=======
+# Created by https://www.toptal.com/developers/gitignore/api/python
+# Edit at https://www.toptal.com/developers/gitignore?templates=python
+
+### Python ###
+# Byte-compiled / optimized / DLL files
+__pycache__/
+>>>>>>> 449668e (Update .gitignore files)
 *.py[cod]
 *$py.class
 
@@ -29,6 +38,11 @@ share/python-wheels/
 *.egg
 MANIFEST
 database.py
+<<<<<<< HEAD
+=======
+node_modules/
+server/__pycache__/
+>>>>>>> 449668e (Update .gitignore files)
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -174,4 +188,8 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+<<<<<<< HEAD
 # End of https://www.toptal.com/developers/gitignore/api/python
+=======
+# End of https://www.toptal.com/developers/gitignore/api/python
+>>>>>>> 449668e (Update .gitignore files)
