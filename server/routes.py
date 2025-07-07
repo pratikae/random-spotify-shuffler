@@ -3,7 +3,7 @@ import random
 import spotipy
 import spotify_helpers
 from scheduler import queue_scheduler
-from database import SessionLocal, User, Playlist, Track
+from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, track_artist_table, playlist_track_table, saved_track_table  
 from spotify_helpers import load_user_cache, cache_liked_songs, cache_playlists_async
 
 
@@ -38,8 +38,19 @@ def callback():
     user_id = user_info["id"]
     display_name = user_info.get("display_name", user_id)
 
-    cache_liked_songs(sp, user_id)
-    cache_playlists_async(sp, user_id)
+    db = SessionLocal()
+    user = db.query(User).filter_by(id=user_id).first()
+    db.close()
+    
+    # print("caching user...")
+    # cache_liked_songs(sp, user_id)
+    # cache_playlists_async(sp, user_id)
+    
+    # only cache user if they are new
+    if not user:
+        print("caching new user...")
+        cache_liked_songs(sp, user_id)
+        cache_playlists_async(sp, user_id)
 
     return redirect(
         f"http://localhost:3000/?user_id={user_id}&display_name={quote(display_name)}&token={access_token}"
@@ -144,6 +155,9 @@ def api_shuffle():
         "num_tracks": len(track_uris)
     })
 
+# these aren't working, issues with the database? database trys to insert a track again into a many many relationship but that isnt possible
+# the root issue is most likely the clear function !
+
 @routes.route("/api/cache/refresh", methods=["POST"])
 def api_cache_refresh():
     data = request.get_json()
@@ -152,27 +166,39 @@ def api_cache_refresh():
         return jsonify({"error": "no user_id"}), 400
 
     sp = get_spotify_client(token=data.get("token"))
-    spotify_helpers.cache_user(sp, user_id)
-    return jsonify({"message": "cache refreshed"})
+
+    api_cache_clear(sp, user_id) 
+    print("refreshing cache")
+    cache_liked_songs(sp, user_id)
+    cache_playlists_async(sp, user_id)
+    print("cache refreshed")
+    return jsonify({"message": "cache cleared and refreshed, reload (playlists may take a while to appear, reload until they appear)"})
 
 @routes.route("/api/cache/clear", methods=["POST"])
-def api_cache_clear():
-    data = request.get_json()
-    user_id = data.get("user_id")
-    if not user_id:
-        return jsonify({"error": "no user_id"}), 400
-
+def api_cache_clear(sp, user_id):
     db = SessionLocal()
+
     user = db.query(User).filter(User.id == user_id).first()
     if user:
         for playlist in user.playlists:
             db.delete(playlist)
+
         user.saved_tracks.clear()
-        db.commit()
+
+    # this clears the joint tables, which was the issue earlier?
+    db.execute(track_artist_table.delete())
+    db.execute(playlist_track_table.delete())
+
+    # delete any remaining rows
+    db.query(Track).filter(~Track.saved_by_users.any(), ~Track.playlists.any()).delete(synchronize_session=False)
+    db.query(Artist).filter(~Artist.tracks.any()).delete(synchronize_session=False)
+    db.query(Album).filter(~Album.tracks.any()).delete(synchronize_session=False)
+    db.query(PodcastEpisode).filter(~PodcastEpisode.show.has()).delete(synchronize_session=False)
+    db.query(Show).filter(~Show.episodes.any()).delete(synchronize_session=False)
+
+    db.commit()
     db.close()
 
-    return jsonify({"message": "cache cleared"})
+    print("cache cleared")
+    return jsonify({"message": "cache cleared successfully"})
 
-@routes.route("/api/revoke", methods=["POST"])
-def api_revoke():
-    return api_cache_clear()

@@ -49,6 +49,8 @@ const App: React.FC = () => {
   return (
     <Menu
       userName={displayName ?? ""}
+      userId={userId}
+      token={accessToken}
       onLogout={handleLogout}
       onNavigate={(page: Page) => setPage(page)}
     />

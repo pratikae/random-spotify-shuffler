@@ -14,6 +14,7 @@ app = Flask(__name__)
 
 from flask_cors import CORS
 CORS(app)
+CORS(routes)
 
 app.sp_oauth = SpotifyOAuth(
     scope="user-read-playback-state user-modify-playback-state playlist-read-private user-library-read",

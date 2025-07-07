@@ -56,7 +56,7 @@ function Shuffler({ userId, onBack, token }: ShufflerProps) {
       const res = await axios.post("http://localhost:8888/api/shuffle", payload);
       setMessage(res.data.message);
     } catch (err) {
-      setMessage("Error shuffling");
+      setMessage("error shuffling");
     } finally {
       setLoading(false);
     }
@@ -117,7 +117,7 @@ function Shuffler({ userId, onBack, token }: ShufflerProps) {
         onChange={() => setShuffleChoice("3")}
       />
       <label htmlFor="random_playlist">generate a random playlist</label>
-    </div>
+      </div>
 
       <br />
       <br />

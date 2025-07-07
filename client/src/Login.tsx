@@ -8,7 +8,7 @@ const Login: React.FC = () => {
   return (
     <div style={{ textAlign: "center", marginTop: "100px" }}>
       <h2>welcome to random spotify shuffler</h2>
-      <button onClick={handleLogin}>Login with Spotify</button>
+      <button onClick={handleLogin}>login with spotify</button>
     </div>
   );
 };

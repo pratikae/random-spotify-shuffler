@@ -23,7 +23,6 @@ def cache_liked_songs(sp, user_id):
     db.close()
 
 import threading
-
 def cache_playlists_async(sp, user_id):
     def worker():
         db = SessionLocal()
