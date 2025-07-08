@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 interface Playlist {
   id: string;
@@ -9,18 +10,18 @@ interface Playlist {
 
 interface ShufflerProps {
   userId: string;
-  onBack: () => void;
   token: string | null;
 }
 
-function Shuffler({ userId, onBack, token }: ShufflerProps) {
+function Shuffler({ userId, token }: ShufflerProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [shuffleChoice, setShuffleChoice] = useState<"1" | "2" | "3" | null>(null);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>("");
 
-  // this will get the playlist when shuffle page is opened
+  const navigate = useNavigate(); // react-router navigation
+
   useEffect(() => {
     const fetchPlaylists = async () => {
       try {
@@ -108,15 +109,15 @@ function Shuffler({ userId, onBack, token }: ShufflerProps) {
       )}
 
       <div>
-      <input
-        type="radio"
-        id="random_playlist"
-        name="shuffle_choice"
-        value="3"
-        checked={shuffleChoice === "3"}
-        onChange={() => setShuffleChoice("3")}
-      />
-      <label htmlFor="random_playlist">generate a random playlist</label>
+        <input
+          type="radio"
+          id="random_playlist"
+          name="shuffle_choice"
+          value="3"
+          checked={shuffleChoice === "3"}
+          onChange={() => setShuffleChoice("3")}
+        />
+        <label htmlFor="random_playlist">generate a random playlist</label>
       </div>
 
       <br />
@@ -129,7 +130,7 @@ function Shuffler({ userId, onBack, token }: ShufflerProps) {
       <br />
       {message && <p>{message}</p>}
 
-      <button onClick={onBack} disabled={loading}>
+      <button onClick={() => navigate("/")} disabled={loading}>
         back
       </button>
     </div>

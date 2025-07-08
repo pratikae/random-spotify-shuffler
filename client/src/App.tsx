@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
-import Login from "./Login.tsx";
-import Menu from "./Menu.tsx";
-import Shuffler from "./Shuffler.tsx";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
-type Page = "menu" | "shuffler";
+import Login from "./Login";
+import Menu from "./Menu";
+import Shuffler from "./Shuffler";
+// import Bundles from "./Bundles";
 
 const App: React.FC = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [page, setPage] = useState<Page>("menu");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -25,35 +25,41 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleLogout = () => {
-    setUserId(null);
-    setDisplayName(null);
-    setAccessToken(null);
-    setPage("menu");
-  };
-
-  if (!userId) {
+  if (!userId || !accessToken) {
     return <Login />;
   }
 
-  if (page === "shuffler") {
-    return (
-      <Shuffler
-        userId={userId}
-        token={accessToken}
-        onBack={() => setPage("menu")}
-      />
-    );
-  }
-
   return (
-    <Menu
-      userName={displayName ?? ""}
-      userId={userId}
-      token={accessToken}
-      onLogout={handleLogout}
-      onNavigate={(page: Page) => setPage(page)}
-    />
+    <Router>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <Menu
+              userName={displayName ?? ""}
+              userId={userId}
+              token={accessToken}
+              onLogout={() => {
+                setUserId(null);
+                setAccessToken(null);
+                setDisplayName(null);
+              }}
+            />
+          }
+        />
+        <Route
+          path="/shuffler"
+          element={
+            <Shuffler
+              userId={userId}
+              token={accessToken}
+            />
+          }
+        />
+        {/* <Route path="/bundles" element={<Bundles />} /> */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
   );
 };
 

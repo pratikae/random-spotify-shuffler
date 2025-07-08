@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
 type MenuProps = {
@@ -6,12 +7,13 @@ type MenuProps = {
   userId: string;
   token: string;
   onLogout: () => void;
-  onNavigate: (page: "shuffler") => void;
 };
 
-const Menu: React.FC<MenuProps> = ({ userName, userId, token, onLogout, onNavigate }) => {
+const Menu: React.FC<MenuProps> = ({ userName, userId, token, onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  const navigate = useNavigate();
 
   const handleRefreshCache = async () => {
     setLoading(true);
@@ -34,17 +36,21 @@ const Menu: React.FC<MenuProps> = ({ userName, userId, token, onLogout, onNaviga
     <div style={{ textAlign: "center", marginTop: "100px" }}>
       <h2>welcome, {userName}!</h2>
 
-      <button onClick={() => onNavigate("shuffler")} disabled={loading}>
+      <button onClick={() => navigate("/shuffler")} disabled={loading}>
         shuffle
       </button>
-      
-      <br />
-      <br />
+      <br /><br />
+
+      <button onClick={() => navigate("/bundles")} disabled={loading}>
+        bundles
+      </button>
+      <br /><br />
+
       <button onClick={handleRefreshCache} disabled={loading}>
         {loading ? "refreshing cache..." : "refresh cache"}
       </button>
-      <br />
-      <br />
+      <br /><br />
+
       <button onClick={onLogout} disabled={loading}>
         logout
       </button>
@@ -55,19 +61,3 @@ const Menu: React.FC<MenuProps> = ({ userName, userId, token, onLogout, onNaviga
 };
 
 export default Menu;
-
-
-// simple ui for caching with every log in
-
-// const Menu: React.FC<MenuProps> = ({ userName, onLogout, onNavigate }) => {
-//   return (
-//     <div style={{ textAlign: "center", marginTop: "100px" }}>
-//       <h2>welcome, {userName}</h2>
-//       <button onClick={() => onNavigate("shuffler")}>shuffle</button>
-//       <br /><br />
-//       <button onClick={onLogout}>logout</button>
-//     </div>
-//   );
-// };
-
-// export default Menu;
