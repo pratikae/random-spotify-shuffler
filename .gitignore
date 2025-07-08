@@ -133,7 +133,8 @@ ENV/
 env.bak/
 venv.bak/
 .cache
-server/init_db.py
+spotify_cache.db
+
 
 # Spyder project settings
 .spyderproject
