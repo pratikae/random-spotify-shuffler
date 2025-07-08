@@ -37,6 +37,7 @@ const Menu: React.FC<MenuProps> = ({ userName, userId, token, onLogout, onNaviga
       <button onClick={() => onNavigate("shuffler")} disabled={loading}>
         shuffle
       </button>
+      
       <br />
       <br />
       <button onClick={handleRefreshCache} disabled={loading}>

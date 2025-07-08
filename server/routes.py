@@ -3,7 +3,7 @@ import random
 import spotipy
 import spotify_helpers
 from scheduler import queue_scheduler
-from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, track_artist_table, playlist_track_table, saved_track_table  
+from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, track_artist_table, playlist_track_table, saved_track_table  
 from spotify_helpers import cache_liked_songs, cache_playlists_async, play_immediately, queue_bundle, skip_current, check_if_bundle, get_curr
 
 
@@ -153,6 +153,41 @@ def api_shuffle():
         "message": f"shuffling {playlist_name}!",
         "num_tracks": len(track_uris)
     })
+
+from flask import request, jsonify
+
+@routes.route('/create_bundle', methods=['POST'])
+def create_bundle():
+    data = request.json
+    db = SessionLocal()
+    intro_song_id = data.get('intro_song_id')
+    main_song_id = data.get('main_song_id')
+    strict = data.get('strict', False)
+
+    if not intro_song_id or not main_song_id:
+        return jsonify({'error': 'Missing required song IDs'}), 400
+
+    # no dupes
+    existing = Bundle.query.filter_by(
+        intro_song_id=intro_song_id,
+        main_song_id=main_song_id,
+        strict=strict
+    ).first()
+
+    if existing:
+        return jsonify({'error': 'bundle already exists'}), 409
+
+    new_bundle = Bundle(
+        intro_song_id=intro_song_id,
+        main_song_id=main_song_id,
+        strict=strict
+    )
+    db.add(new_bundle)
+    db.commit()
+    db.close()
+
+    return jsonify({'message': 'bundle created', 'bundle_id': new_bundle.id}), 201
+
 
 @routes.route('/bundle-check', methods=['POST'])
 def bundle_check():
