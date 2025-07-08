@@ -4,7 +4,7 @@ import spotipy
 import spotify_helpers
 from scheduler import queue_scheduler
 from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, track_artist_table, playlist_track_table, saved_track_table  
-from spotify_helpers import load_user_cache, cache_liked_songs, cache_playlists_async
+from spotify_helpers import cache_liked_songs, cache_playlists_async, play_immediately, queue_bundle, skip_current, check_if_bundle, get_curr
 
 
 routes = Blueprint("routes", __name__)
@@ -55,7 +55,6 @@ def callback():
     return redirect(
         f"http://localhost:3000/?user_id={user_id}&display_name={quote(display_name)}&token={access_token}"
     )
-
 
 @routes.route("/api/get_playlists", methods=["GET"])
 def api_get_playlists():
@@ -155,8 +154,29 @@ def api_shuffle():
         "num_tracks": len(track_uris)
     })
 
-# these aren't working, issues with the database? database trys to insert a track again into a many many relationship but that isnt possible
-# the root issue is most likely the clear function !
+@routes.route('/bundle-check', methods=['POST'])
+def bundle_check():
+    access_token = request.headers.get('Authorization').split(" ")[1]
+    current_track = get_curr(access_token)
+    if not current_track:
+        return jsonify({'message': 'No track playing'}), 200
+
+    song_id = current_track['id']
+    role, bundle = check_if_bundle(song_id)
+
+    if role == 'intro':
+        # queue main
+        queue_bundle(access_token, bundle.main_song_id)
+        return jsonify({'message': f'Intro detected, queued: {bundle.main_song_id}'}), 200
+
+    elif role == 'main':
+        # skip curr, play intro and queue main
+        skip_current(access_token)  
+        play_immediately(access_token, bundle.intro_song_id)
+        queue_bundle(access_token, bundle.main_song_id)
+        return jsonify({'message': f'Main detected, playing intro first: {bundle.intro_song_id}'}), 200
+
+    return jsonify({'message': 'No bundle matched'}), 200
 
 @routes.route("/api/cache/refresh", methods=["POST"])
 def api_cache_refresh():

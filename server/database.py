@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, Table, Date
+from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, Table, Date, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
@@ -84,6 +84,15 @@ class PodcastEpisode(Base):
     release_date = Column(Date, nullable=True)
 
     show = relationship("Show", back_populates="episodes")
+    
+# only a bundle of two for now
+class Bundle(Base):
+    __tablename__ = 'bundles'
+    id = Column(Integer, primary_key=True)
+
+    intro_song_id = Column(String, nullable=False)  # first song
+    main_song_id = Column(String, nullable=False)   # second song
+    strict = Column(Boolean, default=False) # plays bundle no matter if main or intro comes on shuffle
 
 def init_db():
     Base.metadata.create_all(bind=engine)

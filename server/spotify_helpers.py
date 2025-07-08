@@ -1,6 +1,6 @@
 import random
 import json
-from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, saved_track_table, playlist_track_table, track_artist_table
+from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, saved_track_table, playlist_track_table, track_artist_table
 from sqlalchemy.orm.exc import NoResultFound
 
 def cache_liked_songs(sp, user_id):
@@ -207,6 +207,57 @@ def check_queue(sp, track_uris, device_id, user_id):
     user.curr_index = curr_index
     db.commit()
     db.close()
+    
+def check_if_bundle(sp, curr_song_id):
+    bundle_as_intro = Bundle.query.filter_by(intro_song_id=curr_song_id).first()
+    if bundle_as_intro:
+        return ('intro', bundle_as_intro)
+
+    # only for strict bundles
+    bundle_as_main = Bundle.query.filter_by(main_song_id=curr_song_id, strict=True).first()
+    if bundle_as_main:
+        return ('main', bundle_as_main)
+
+    return (None, None)
+
+import requests
+def play_immediately(token, track_id):
+    headers = {'Authorization': f'Bearer {token}'}
+    data = {"uris": [f"spotify:track:{track_id}"]}
+    requests.put('https://api.spotify.com/v1/me/player/play', json=data, headers=headers)
+
+def skip_current(token):
+    headers = {'Authorization': f'Bearer {token}'}
+    requests.post('https://api.spotify.com/v1/me/player/next', headers=headers)
+
+def queue_bundle(token, track_id):
+    headers = {'Authorization': f'Bearer {token}'}
+    requests.post(
+        'https://api.spotify.com/v1/me/player/queue',
+        params={'uri': f'spotify:track:{track_id}'},
+        headers=headers
+    )
+    
+def get_curr(token):
+    headers = {
+        'Authorization': f'Bearer {token}'
+    }
+    response = requests.get('https://api.spotify.com/v1/me/player/currently-playing', headers=headers)
+
+    if response.status_code != 200:
+        return None  
+
+    data = response.json()
+    item = data.get('item')
+    if not item:
+        return None
+
+    return {
+        'id': item['id'],
+        'name': item['name'],
+        'artists': [artist['name'] for artist in item['artists']],
+        'uri': item['uri']
+    }
     
 def get_playlists(sp):
     playlists = []
