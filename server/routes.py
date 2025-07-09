@@ -3,9 +3,8 @@ import random
 import spotipy
 import spotify_helpers
 from scheduler import queue_scheduler
-from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, track_artist_table, playlist_track_table, saved_track_table  
-from spotify_helpers import cache_liked_songs, cache_playlists_async, play_immediately, queue_bundle, skip_current, check_if_bundle, get_curr
-
+from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, track_artist_table, playlist_track_table
+from spotify_helpers import cache_liked_songs, cache_playlists_async, apply_bundles, get_bundles
 
 routes = Blueprint("routes", __name__)
 
@@ -79,6 +78,30 @@ def api_get_playlists():
     db.close()
     return jsonify(playlists)
 
+@routes.route("/api/get_bundles", methods=["GET"])
+def api_get_bundles():
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"error": "no user_id"}), 404
+    
+    db = SessionLocal()
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        db.close()
+        return jsonify({"error": "user not found"}), 404
+
+    bundles = [
+        {
+            "id": bundle.id,
+            "intro_song_id": bundle.intro_song_id,
+            "main_song_id": bundle.main_song_id,
+            "strict": bundle.strict
+        }
+        for bundle in user.bundles
+    ]
+    db.close()
+    return jsonify(bundles)
+
 @routes.route("/api/get_saved_songs", methods=["GET"])
 def api_get_saved_songs():
     user_id = request.args.get("user_id")
@@ -92,7 +115,11 @@ def api_get_saved_songs():
         return jsonify({"error": "user not found"}), 404
 
     tracks = [
-        {"id": t.id, "name": t.name, "album": t.album.name if t.album else None}
+        {
+            "id": t.id, 
+            "name": t.name, 
+            "album": t.album.name if t.album else None
+        }
         for t in user.saved_tracks
     ]
     db.close()
@@ -145,73 +172,152 @@ def api_shuffle():
         db.close()
         return jsonify({"error": "invalid shuffle_choice"}), 400
 
-    random.shuffle(track_uris)
-    spotify_helpers.start_playback_with_queue(sp, track_uris, device_id, queue_scheduler, user_id=user_id)
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        pass
 
+    random.shuffle(track_uris) 
+    bundles = user.bundles  
+    if bundles:
+        track_uris = apply_bundles(track_uris, bundles)
+        
+    db.close()
+    spotify_helpers.start_playback_with_queue(sp, track_uris, device_id, queue_scheduler, user_id=user_id)
 
     return jsonify({
         "message": f"shuffling {playlist_name}!",
         "num_tracks": len(track_uris)
     })
+    
+from flask_cors import cross_origin
 
-from flask import request, jsonify
-
-@routes.route('/create_bundle', methods=['POST'])
-def create_bundle():
+@routes.route('/api/create_bundle', methods=["POST", "OPTIONS"])
+@cross_origin()
+def api_create_bundle():
+    if request.method == "OPTIONS":
+        return "", 200
     data = request.json
-    db = SessionLocal()
     intro_song_id = data.get('intro_song_id')
     main_song_id = data.get('main_song_id')
     strict = data.get('strict', False)
+    user_id = data.get('user_id') 
 
-    if not intro_song_id or not main_song_id:
-        return jsonify({'error': 'Missing required song IDs'}), 400
+    if not intro_song_id or not main_song_id or not user_id:
+        return jsonify({'error': 'Missing required song IDs or user_id'}), 400
 
-    # no dupes
-    existing = Bundle.query.filter_by(
-        intro_song_id=intro_song_id,
-        main_song_id=main_song_id,
-        strict=strict
-    ).first()
+    db = SessionLocal()
+    try:
+        existing = db.query(Bundle).filter_by(
+            intro_song_id=intro_song_id,
+            main_song_id=main_song_id,
+            strict=strict,
+            user_id=user_id 
+        ).first()
 
-    if existing:
-        return jsonify({'error': 'bundle already exists'}), 409
+        if existing:
+            return jsonify({'error': 'bundle already exists'}), 409
 
-    new_bundle = Bundle(
-        intro_song_id=intro_song_id,
-        main_song_id=main_song_id,
-        strict=strict
-    )
-    db.add(new_bundle)
+        new_bundle = Bundle(
+            intro_song_id=intro_song_id,
+            main_song_id=main_song_id,
+            strict=strict,
+            user_id=user_id 
+        )
+        db.add(new_bundle)
+        db.commit()
+        db.refresh(new_bundle)
+    finally:
+        db.close()
+
+    return jsonify({
+        'message': 'bundle created',
+        'bundle_id': new_bundle.id,
+        'intro_song_id': new_bundle.intro_song_id,
+        'main_song_id': new_bundle.main_song_id,
+        'strict': new_bundle.strict
+    }), 201
+
+@routes.route("/api/bundles/<int:bundle_id>", methods=["PATCH"])
+def api_update_bundle(bundle_id):
+    data = request.json
+    strict = data.get("strict")
+    if strict is None:
+        return jsonify({"error": "strict field required"}), 400
+
+    db = SessionLocal()
+    bundle = db.query(Bundle).filter_by(id=bundle_id).first()
+    if not bundle:
+        db.close()
+        return jsonify({"error": "bundle not found"}), 404
+
+    bundle.strict = strict
     db.commit()
     db.close()
+    return jsonify({"message": "bundle updated", "bundle_id": bundle_id, "strict": strict})
 
-    return jsonify({'message': 'bundle created', 'bundle_id': new_bundle.id}), 201
+@routes.route("/api/bundles/<int:bundle_id>", methods=["DELETE"])
+def api_delete_bundle(bundle_id):
+    db = SessionLocal()
+    bundle = db.query(Bundle).filter_by(id=bundle_id).first()
+    if not bundle:
+        db.close()
+        return jsonify({"error": "bundle not found"}), 404
 
+    db.delete(bundle)
+    db.commit()
+    db.close()
+    return jsonify({"message": "bundle deleted", "bundle_id": bundle_id})
 
-@routes.route('/bundle-check', methods=['POST'])
-def bundle_check():
-    access_token = request.headers.get('Authorization').split(" ")[1]
-    current_track = get_curr(access_token)
-    if not current_track:
-        return jsonify({'message': 'No track playing'}), 200
+@routes.route("/api/search_songs", methods=["GET"])
+def api_search_songs():
+    try:
+        query = request.args.get("query", "").lower()
+        db = SessionLocal()
+        if not query:
+            return jsonify([])
 
-    song_id = current_track['id']
-    role, bundle = check_if_bundle(song_id)
+        matches = (
+            db.query(Track)
+            .filter(Track.name.ilike(f"%{query}%"))
+            .limit(10)
+            .all()
+        )
 
-    if role == 'intro':
-        # queue main
-        queue_bundle(access_token, bundle.main_song_id)
-        return jsonify({'message': f'Intro detected, queued: {bundle.main_song_id}'}), 200
+        return jsonify([
+            {
+                "id": s.id,
+                "name": s.name,
+                "artists": [
+                    {
+                        "id": artist.id,
+                        "name": artist.name
+                    } for artist in s.artists
+                ]
+            }
+            for s in matches
+        ])
+    except Exception as e:
+        print(f"Search songs error: {e}")
+        return jsonify({"error": "internal server error"}), 500
+    finally:
+        db.close()
+        
+@routes.route("/api/get_track", methods=["GET"])
+def api_get_track():
+    track_id = request.args.get("id")
+    db = SessionLocal()
+    try:
+        track = db.query(Track).filter(Track.id == track_id).one_or_none()
+        if not track:
+            return jsonify({"error": "Track not found"}), 404
 
-    elif role == 'main':
-        # skip curr, play intro and queue main
-        skip_current(access_token)  
-        play_immediately(access_token, bundle.intro_song_id)
-        queue_bundle(access_token, bundle.main_song_id)
-        return jsonify({'message': f'Main detected, playing intro first: {bundle.intro_song_id}'}), 200
-
-    return jsonify({'message': 'No bundle matched'}), 200
+        return jsonify({
+            "id": track.id,
+            "name": track.name,
+            "artists": [{"id": a.id, "name": a.name} for a in track.artists]
+        })
+    finally:
+        db.close()
 
 @routes.route("/api/cache/refresh", methods=["POST"])
 def api_cache_refresh():

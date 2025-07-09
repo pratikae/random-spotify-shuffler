@@ -3,7 +3,7 @@ from flask import Flask
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from spotipy.oauth2 import SpotifyOAuth
-from database import init_db
+from database import init_db, SessionLocal, User, Bundle
 from routes import routes
 from scheduler import queue_scheduler 
 
@@ -14,7 +14,6 @@ app = Flask(__name__)
 
 from flask_cors import CORS
 CORS(app)
-CORS(routes)
 
 app.sp_oauth = SpotifyOAuth(
     scope="user-read-playback-state user-modify-playback-state playlist-read-private user-library-read",

@@ -208,18 +208,7 @@ def check_queue(sp, track_uris, device_id, user_id):
     db.commit()
     db.close()
     
-def check_if_bundle(sp, curr_song_id):
-    bundle_as_intro = Bundle.query.filter_by(intro_song_id=curr_song_id).first()
-    if bundle_as_intro:
-        return ('intro', bundle_as_intro)
-
-    # only for strict bundles
-    bundle_as_main = Bundle.query.filter_by(main_song_id=curr_song_id, strict=True).first()
-    if bundle_as_main:
-        return ('main', bundle_as_main)
-
-    return (None, None)
-
+# bundles helpers
 import requests
 def play_immediately(token, track_id):
     headers = {'Authorization': f'Bearer {token}'}
@@ -238,6 +227,40 @@ def queue_bundle(token, track_id):
         headers=headers
     )
     
+def apply_bundles(track_ids: list[str], bundles: list[Bundle]) -> list[str]:
+    new_queue = []
+    seen_bundles = set()
+
+    for track_id in track_ids:
+        # find next bundle that matches current track
+        bundle = next((
+            b for b in bundles
+            if b.id not in seen_bundles and (
+                (b.strict and (b.intro_song_id == track_id or b.main_song_id == track_id)) or
+                (not b.strict and b.intro_song_id == track_id)
+            )
+        ), None)
+
+        if bundle:
+            seen_bundles.add(bundle.id)
+
+            if bundle.strict:
+                # always intro then main regardless of current track
+                new_queue.append(bundle.intro_song_id)
+                new_queue.append(bundle.main_song_id)
+            else:
+                # not strict, if current is intro, add intro + main
+                # if current is main, just add main
+                if track_id == bundle.intro_song_id:
+                    new_queue.append(bundle.intro_song_id)
+                    new_queue.append(bundle.main_song_id)
+                else:
+                    new_queue.append(track_id)
+        else:
+            new_queue.append(track_id)
+
+    return new_queue
+
 def get_curr(token):
     headers = {
         'Authorization': f'Bearer {token}'
@@ -286,6 +309,20 @@ def get_saved_songs(sp):
         results = sp.next(results)
         track_items.extend(results['items'])
     return [t['track'] for t in track_items if t['track']]
+
+def get_bundles(user_id: str, db_session):
+    user = db_session.query(User).filter_by(id=user_id).first()
+    if not user:
+        return []
+
+    bundles = []
+    for bundle in user.bundles:
+        bundles.append({
+            "intro_song_id": bundle.intro_song_id,
+            "main_song_id": bundle.main_song_id,
+            "strict": bundle.strict
+        })
+    return bundles
 
 def reset_scheduler(queue_scheduler):
     if queue_scheduler.running:

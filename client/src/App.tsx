@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import Login from "./Login";
-import Menu from "./Menu";
-import Shuffler from "./Shuffler";
-// import Bundles from "./Bundles";
+import Login from "./Login.tsx";
+import Menu from "./Menu.tsx";
+import Shuffler from "./Shuffler.tsx";
+import Bundles from "./Bundles.tsx";
 
 const App: React.FC = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -25,41 +25,51 @@ const App: React.FC = () => {
     }
   }, []);
 
-  if (!userId || !accessToken) {
-    return <Login />;
-  }
-
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
         <Route
           path="/"
           element={
-            <Menu
-              userName={displayName ?? ""}
-              userId={userId}
-              token={accessToken}
-              onLogout={() => {
-                setUserId(null);
-                setAccessToken(null);
-                setDisplayName(null);
-              }}
-            />
+            userId && accessToken ? (
+              <Menu
+                userName={displayName ?? ""}
+                userId={userId}
+                token={accessToken}
+                onLogout={() => {
+                  setUserId(null);
+                  setAccessToken(null);
+                  setDisplayName(null);
+                }}
+              />
+            ) : (
+              <Login />
+            )
           }
         />
         <Route
           path="/shuffler"
           element={
-            <Shuffler
-              userId={userId}
-              token={accessToken}
-            />
+            userId && accessToken ? (
+              <Shuffler userId={userId} token={accessToken} />
+            ) : (
+              <Navigate to="/" replace />
+            )
           }
         />
-        {/* <Route path="/bundles" element={<Bundles />} /> */}
+        <Route
+          path="/bundles"
+          element={
+            userId && accessToken ? (
+              <Bundles userId={userId} token={accessToken} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Router>
+    </BrowserRouter>
   );
 };
 

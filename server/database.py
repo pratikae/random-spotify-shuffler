@@ -34,6 +34,7 @@ class User(Base):
 
     playlists = relationship("Playlist", back_populates="user")
     saved_tracks = relationship("Track", secondary=saved_track_table, back_populates="saved_by_users")
+    bundles = relationship("Bundle", back_populates="user")
 
 class Playlist(Base):
     __tablename__ = "playlists"
@@ -89,10 +90,13 @@ class PodcastEpisode(Base):
 class Bundle(Base):
     __tablename__ = 'bundles'
     id = Column(Integer, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"))
 
     intro_song_id = Column(String, nullable=False)  # first song
     main_song_id = Column(String, nullable=False)   # second song
     strict = Column(Boolean, default=False) # plays bundle no matter if main or intro comes on shuffle
+    
+    user = relationship("User", back_populates="bundles")
 
 def init_db():
     Base.metadata.create_all(bind=engine)
