@@ -22,13 +22,14 @@ function Shuffler({ userId, token }: ShufflerProps) {
 
   const navigate = useNavigate(); // react-router navigation
 
+  // fetch all playlists on load
   useEffect(() => {
     const fetchPlaylists = async () => {
       try {
         const res = await axios.get(`http://localhost:8888/api/get_playlists?user_id=${userId}`);
         setPlaylists(res.data);
       } catch {
-        setMessage("Failed to load playlists");
+        setMessage("failed to load playlists");
       }
     };
     fetchPlaylists();
