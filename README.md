@@ -1,4 +1,5 @@
-spotify shuffler (and more to come??)
+spotify shuffler
+features: true random shuffle, bundles, search by category (wip)
 
 - download code, open in vscode
 - install nodejs and python
