@@ -15,12 +15,12 @@ interface ShufflerProps {
 
 function Shuffler({ userId, token }: ShufflerProps) {
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [shuffleChoice, setShuffleChoice] = useState<"1" | "2" | "3" | null>(null);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>("");
 
-  const navigate = useNavigate(); // react-router navigation
+  const navigate = useNavigate(); 
 
   // fetch all playlists on load
   useEffect(() => {
@@ -47,7 +47,7 @@ function Shuffler({ userId, token }: ShufflerProps) {
 
     if (shuffleChoice === "2") {
       if (!selectedPlaylistId) {
-        setMessage("Please select a playlist");
+        setMessage("please select a playlist");
         setLoading(false);
         return;
       }
@@ -56,9 +56,9 @@ function Shuffler({ userId, token }: ShufflerProps) {
 
     try {
       const res = await axios.post("http://localhost:8888/api/shuffle", payload);
-      setMessage(res.data.message);
+      setMessage({ text: res.data.message, type: "success" });
     } catch (err) {
-      setMessage("error shuffling");
+      setMessage({text: "error shuffling", type: "error"});
     } finally {
       setLoading(false);
     }
@@ -129,8 +129,19 @@ function Shuffler({ userId, token }: ShufflerProps) {
 
       <br />
       <br />
-      {message && <p>{message}</p>}
+      {message && (
+        <div
+          style={{
+            marginTop: "10px",
+            color: message.type === "success" ? "green" : "red",
+            fontWeight: "bold",
+          }}
+        >
+          {message.text}
+        </div>
+      )}
 
+      <br /> <br />
       <button onClick={() => navigate("/")} disabled={loading}>
         back
       </button>

@@ -16,7 +16,7 @@ from flask_cors import CORS
 CORS(app)
 
 app.sp_oauth = SpotifyOAuth(
-    scope="user-read-playback-state user-modify-playback-state playlist-read-private user-library-read",
+    scope="user-read-playback-state user-modify-playback-state playlist-read-private user-library-read playlist-modify-public playlist-modify-private user-library-modify",
     client_id=os.getenv("SPOTIPY_CLIENT_ID"),
     client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
     redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI")

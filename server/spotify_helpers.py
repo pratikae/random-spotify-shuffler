@@ -1,6 +1,7 @@
 import random
 import json
-from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, saved_track_table, playlist_track_table, track_artist_table
+from flask import jsonify
+from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, Genre
 from sqlalchemy.orm.exc import NoResultFound
 
 def cache_liked_songs(sp, user_id):
@@ -44,10 +45,10 @@ def cache_playlists_async(sp, user_id):
             playlist_tracks = get_songs(sp, playlist_id)
             for track_data in playlist_tracks:
                 if not track_data or track_data.get("type") != "track":
-                    print(f"Skipping non-track or malformed item: {track_data}")
+                    print(f"skipping non-track or malformed item: {track_data}")
                     continue
                 if not track_data.get("id"):
-                    print(f"Skipping track with missing ID: {track_data}")
+                    print(f"skipping track with missing ID: {track_data}")
                     continue
 
                 with db.no_autoflush:
@@ -81,6 +82,16 @@ def get_or_create_artist(artist_data, db):
     if not artist:
         artist = Artist(id=artist_data["id"], name=artist_data["name"])
         db.add(artist)
+        
+    if "genres" in artist_data:
+        for genre_name in artist_data["genres"]:
+            genre = db.query(Genre).filter_by(name=genre_name).first()
+            if not genre:
+                genre = Genre(name=genre_name)
+                db.add(genre)
+            if genre not in artist.genres:
+                artist.genres.append(genre)
+                
     return artist
 
 def get_or_create_track(track_data, db):
@@ -323,6 +334,49 @@ def get_bundles(user_id: str, db_session):
             "strict": bundle.strict
         })
     return bundles
+
+def fetch_genres(db):
+    genre_names = db.query(Genre.name).distinct().all()
+    print("Raw genre names from DB:", genre_names)
+    genres = sorted({name for (name,) in genre_names})  # get everything unique genre and sort
+    return genres
+
+def serialize_track(track):
+        return {
+            "id": track["id"],
+            "name": track["name"],
+            "artists": [
+                {"id": a["id"], "name": a["name"]} for a in track["artists"]
+            ],
+        }
+
+# search helpers
+def get_tracks_by_release_year(db, start_year: int, end_year: int):
+    return (
+        db.query(Track)
+        .join(Track.album)
+        .filter(Album.release_date >= f"{start_year}-01-01")
+        .filter(Album.release_date <= f"{end_year}-12-31")
+        .all()
+    )
+    
+def get_tracks_by_artists(db, artist_names: list[str]):
+    return (
+        db.query(Track)
+        .join(Track.artists)
+        .filter(Artist.name.in_(artist_names))
+        .all()
+    )
+    
+def get_tracks_by_genres(session, genre_list: list[str]):
+    return (
+        session.query(Track)
+        .join(Track.artists)
+        .join(Artist.genres)
+        .filter(Genre.name.in_(genre_list))
+        .all()
+    )
+    
 
 def reset_scheduler(queue_scheduler):
     if queue_scheduler.running:

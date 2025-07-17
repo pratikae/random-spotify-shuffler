@@ -3,8 +3,9 @@ import random
 import spotipy
 import spotify_helpers
 from scheduler import queue_scheduler
-from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, track_artist_table, playlist_track_table
-from spotify_helpers import cache_liked_songs, cache_playlists_async, apply_bundles, get_bundles
+from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, track_artist_table, playlist_track_table, saved_track_table
+from spotify_helpers import cache_liked_songs, cache_playlists_async, apply_bundles, fetch_genres, get_tracks_by_artists, get_tracks_by_genres, get_tracks_by_release_year, get_playlists
+from spotipy import Spotify
 
 routes = Blueprint("routes", __name__)
 
@@ -40,10 +41,6 @@ def callback():
     db = SessionLocal()
     user = db.query(User).filter_by(id=user_id).first()
     db.close()
-    
-    # print("caching user...")
-    # cache_liked_songs(sp, user_id)
-    # cache_playlists_async(sp, user_id)
     
     # only cache user if they are new
     if not user:
@@ -128,6 +125,7 @@ def api_get_saved_songs():
         "tracks": tracks
     })
 
+# main shuffle route
 @routes.route("/api/shuffle", methods=["POST"])
 def api_shuffle():
     data = request.get_json()
@@ -189,8 +187,8 @@ def api_shuffle():
         "num_tracks": len(track_uris)
     })
     
+# bundle routes
 from flask_cors import cross_origin
-
 @routes.route('/api/create_bundle', methods=["POST", "OPTIONS"])
 @cross_origin()
 def api_create_bundle():
@@ -268,6 +266,84 @@ def api_delete_bundle(bundle_id):
     db.close()
     return jsonify({"message": "bundle deleted", "bundle_id": bundle_id})
 
+@routes.route("/api/search_category", methods=["POST"])
+def api_search_category():
+    data = request.get_json()
+    artists = data.get("artists", [])
+    genre = data.get("genre")
+    start_year = data.get("start_year")
+    end_year = data.get("end_year")
+    limit = int(data.get("limit", 50))
+
+    db = SessionLocal()
+
+    try:
+        all_tracks = []
+
+        # artists
+        if artists:
+            artist_tracks = get_tracks_by_artists(db, artists)
+            all_tracks.extend(artist_tracks)
+
+        # genres
+        if genre:
+            genre_tracks = get_tracks_by_genres(db, [genre])
+            all_tracks.extend(genre_tracks)
+
+        # release date
+        if start_year and end_year:
+            year_tracks = get_tracks_by_release_year(db, int(start_year), int(end_year))
+            all_tracks.extend(year_tracks)
+
+        # get rid of any duplicate tracks
+        track_map = {}
+        for track in all_tracks:
+            track_map[track.id] = track
+        unique_tracks = list(track_map.values())[:limit]
+
+        return jsonify([
+            {
+                "id": t.id,
+                "name": t.name,
+                "artists": [{"id": a.id, "name": a.name} for a in t.artists]
+            } for t in unique_tracks
+        ])
+
+    except Exception as e:
+        print("error in search_categories:", e)
+        return jsonify([]), 500
+
+    finally:
+        db.close()
+
+@routes.route("/api/search_artists", methods=["GET"])
+def api_search_artists():
+    try:
+        query = request.args.get("query", "").lower()
+        db = SessionLocal()
+        if not query:
+            return jsonify([])
+
+        matches = (
+            db.query(Artist)
+            .filter(Artist.name.ilike(f"%{query}%"))
+            .limit(10)
+            .all()
+        )
+
+        return jsonify([
+            {
+                "id": artist.id,
+                "name": artist.name
+            }
+            for artist in matches
+        ])
+    except Exception as e:
+        print(f"search artists error: {e}")
+        return jsonify({"error": "internal server error"}), 500
+    finally:
+        db.close()
+
 @routes.route("/api/search_songs", methods=["GET"])
 def api_search_songs():
     try:
@@ -318,6 +394,164 @@ def api_get_track():
         })
     finally:
         db.close()
+
+@routes.route("/api/playlist/new", methods=["POST"])
+def create_new_playlist():
+    data = request.get_json()
+    user_id = data.get("user_id")
+    name = data.get("name")
+    track_ids = data.get("track_ids", [])
+    token = data.get("token")
+
+    if not user_id or not name:
+        return jsonify({"error": "missing user_id or name"}), 400
+    
+    # create new playlist in spotify
+    sp = Spotify(auth=token)
+    try:
+        new_playlist = sp.user_playlist_create(user_id, name, public=False)
+        new_id = new_playlist['id']
+
+        # add tracks to new playlist 
+        if track_ids:
+            sp.playlist_add_items(new_id, track_ids)
+
+    except Exception as e:
+        print("spotify error:", e)
+        return jsonify({"error": "failed to create spotify playlist"}), 500
+
+    db = SessionLocal()
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        db.close()
+        return jsonify({"error": "user not found"}), 404
+
+    # make new playlist in db
+    playlist = Playlist(name=name, user=user, id=new_id)
+    db.add(playlist)
+
+    for track_id in track_ids:
+        track = db.query(Track).filter_by(id=track_id).first()
+        if track and track not in playlist.tracks:
+            playlist.tracks.append(track)
+
+    db.commit()
+    db.close()
+    
+    return jsonify({"message": "playlist created", "playlist_name": name}), 200
+
+@routes.route("/api/playlist/add_tracks", methods=["POST"])
+def add_to_playlist():
+    data = request.get_json()
+    playlist_id = data.get("playlist_id")
+    track_ids = data.get("track_ids", [])
+    token = data.get("token")
+
+    if not playlist_id or not track_ids:
+        return jsonify({"error": "missing playlist_id or track_ids"}), 400
+
+    # add to playlist in db
+    db = SessionLocal()
+    playlist = db.query(Playlist).filter_by(id=playlist_id).first()
+    if not playlist:
+        db.close()
+        return jsonify({"error": "playlist not found"}), 404
+
+    for track_id in track_ids:
+        track = db.query(Track).filter_by(id=track_id).first()
+        if track and track not in playlist.tracks:
+            playlist.tracks.append(track)
+
+    db.commit()
+    db.close()
+    
+    # add to playlist in spotify
+    sp = Spotify(auth=token)
+    try:
+        sp.playlist_add_items(playlist_id, track_ids)
+        
+    except Exception as e:
+        print("spotify error:", e)
+        return jsonify({"error": "failed to add tracks"}), 500
+    
+    return jsonify({"message": "tracks added to playlist"}), 200
+    
+@routes.route("/api/queue", methods=["POST"])
+def add_to_queue():
+    data = request.get_json()
+    track_ids = data.get("track_ids", [])
+    token = data.get("token")
+    
+    if not track_ids:
+        return jsonify({"error": "missing track_ids"}), 400
+    
+    sp = Spotify(auth=token)
+    try:
+        for track in track_ids:
+            sp.add_to_queue(track)
+    except Exception as e:
+        print("spotify error:", e)
+        return jsonify({"error": "failed to add tracks to queue"}), 500
+    
+    return jsonify({"message": "track added to queue"}), 200
+    
+@routes.route("/api/remove_liked", methods=["POST"])    
+def remove_from_liked():
+    data = request.get_json()
+    track_ids = data.get("track_ids", [])
+    token = data.get("token")
+    user_id = data.get("user_id")
+    
+    if not track_ids:
+        return jsonify({"error": "missing track_ids"}), 400
+    if not token:
+        return jsonify({"error": "missing access token"}), 400
+    if not user_id:
+        return jsonify({"error": "missing user_id"}), 400
+    
+    # remove from spotify library
+    sp = Spotify(auth=token)
+    try:
+        sp.current_user_saved_tracks_delete(track_ids)
+    except Exception as e:
+        print("spotify error:", e)
+        return jsonify({"error": "failed to delete tracks"}), 500
+    
+    # remove from cache
+    db = SessionLocal()
+    try:
+        for track in track_ids:
+            db.query(saved_track_table).filter(
+                (saved_track_table.c.user_id == user_id) &
+                (saved_track_table.c.track_id == track)
+            ).delete(synchronize_session=False)
+        db.commit()
+    except Exception as e:
+        print("db error:", e)
+        db.rollback()
+        return jsonify({"error": "failed to delete tracks from cache"}), 500
+    finally:
+        db.close()
+
+    return jsonify({"message": "tracks removed from liked songs"}), 200
+    
+    
+      
+# not working 
+@routes.route("/api/get_genres", methods=["GET"])
+def get_genres():
+    print("get_genres called")
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+
+    db = SessionLocal()
+    genres_set = fetch_genres(db)
+    db.close()
+    
+    print("genres:")
+    print(genres_set)
+    return jsonify({"genres": genres_set})
 
 @routes.route("/api/cache/refresh", methods=["POST"])
 def api_cache_refresh():

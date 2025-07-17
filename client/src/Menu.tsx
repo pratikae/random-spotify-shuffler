@@ -46,6 +46,10 @@ const Menu: React.FC<MenuProps> = ({ userName, userId, token, onLogout }) => {
       </button>
       <br /><br />
 
+      <button onClick={() => navigate("/search")} disabled={loading}>
+        search
+      </button>
+      <br /><br />
       <button onClick={handleRefreshCache} disabled={loading}>
         {loading ? "refreshing cache..." : "refresh cache"}
       </button>

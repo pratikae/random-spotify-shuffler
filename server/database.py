@@ -26,6 +26,12 @@ track_artist_table = Table(
     Column("artist_id", String, ForeignKey("artists.id"), primary_key=True)
 )
 
+artist_genre_table = Table(
+    "artist_genre", Base.metadata,
+    Column("artist_id", String, ForeignKey("artists.id"), primary_key=True),
+    Column("genre_id", Integer, ForeignKey("genres.id"), primary_key=True)
+)
+
 class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True, index=True)
@@ -57,8 +63,17 @@ class Artist(Base):
     __tablename__ = "artists"
     id = Column(String, primary_key=True)
     name = Column(String)
+    genres = Column(String) 
 
     tracks = relationship("Track", secondary=track_artist_table, back_populates="artists")
+    genres = relationship("Genre", secondary=artist_genre_table, back_populates="artists")
+
+class Genre(Base):
+    __tablename__ = "genres"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True, index=True)
+
+    artists = relationship("Artist", secondary=artist_genre_table, back_populates="genres")
 
 class Track(Base):
     __tablename__ = "tracks"
