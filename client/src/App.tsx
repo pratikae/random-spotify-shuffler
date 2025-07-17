@@ -5,6 +5,7 @@ import Login from "./Login.tsx";
 import Menu from "./Menu.tsx";
 import Shuffler from "./Shuffler.tsx";
 import Bundles from "./Bundles.tsx";
+import Search from "./Search.tsx";
 
 const App: React.FC = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -67,6 +68,13 @@ const App: React.FC = () => {
             )
           }
         />
+        <Route path="/search" element={
+          userId && accessToken ? (
+              <Search userId={userId} token={accessToken} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+        } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
