@@ -176,3 +176,5 @@ poetry.toml
 
 # LSP config files
 pyrightconfig.json
+
+server/create_db.py
