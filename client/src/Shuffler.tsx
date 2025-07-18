@@ -67,7 +67,7 @@ function Shuffler({ userId, token }: ShufflerProps) {
   return (
     <div style={{ textAlign: "center", marginTop: "50px" }}>
       <h2>shuffle options</h2>
-      <h3>please remember to clear your queue before shuffling!</h3>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
 
       <div>
         <input
@@ -120,6 +120,19 @@ function Shuffler({ userId, token }: ShufflerProps) {
         />
         <label htmlFor="random_playlist">generate a random playlist</label>
       </div>
+
+      {/* sorry this is obnxious, will change to an alert eventually  */}
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+      <h1 style={{color: "red"}}>please remember to clear your queue before shuffling!</h1>
+
 
       <br />
       <br />
