@@ -243,15 +243,19 @@ def api_update_bundle(bundle_id):
         return jsonify({"error": "strict field required"}), 400
 
     db = SessionLocal()
-    bundle = db.query(Bundle).filter_by(id=bundle_id).first()
-    if not bundle:
-        db.close()
-        return jsonify({"error": "bundle not found"}), 404
+    try:
+        bundle = db.query(Bundle).filter_by(id=bundle_id).first()
+        if not bundle:
+            return jsonify({"error": "bundle not found"}), 404
 
-    bundle.strict = strict
-    db.commit()
-    db.close()
-    return jsonify({"message": "bundle updated", "bundle_id": bundle_id, "strict": strict})
+        bundle.strict = strict  # dont change it again!!
+        db.commit()
+        return jsonify({"message": "bundle updated", "bundle_id": bundle_id, "strict": strict})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 @routes.route("/api/bundles/<int:bundle_id>", methods=["DELETE"])
 def api_delete_bundle(bundle_id):
@@ -363,6 +367,7 @@ def api_search_songs():
             {
                 "id": s.id,
                 "name": s.name,
+                "album": s.album.name if s.album else None,
                 "artists": [
                     {
                         "id": artist.id,
@@ -373,11 +378,11 @@ def api_search_songs():
             for s in matches
         ])
     except Exception as e:
-        print(f"Search songs error: {e}")
+        print(f"search songs error: {e}")
         return jsonify({"error": "internal server error"}), 500
     finally:
         db.close()
-        
+ 
 @routes.route("/api/get_track", methods=["GET"])
 def api_get_track():
     track_id = request.args.get("id")

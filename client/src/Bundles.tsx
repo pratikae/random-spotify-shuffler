@@ -167,7 +167,7 @@ function Bundles({ userId, token }: BundleProps) {
             prev.map(b => (b.id === bundleId ? { ...b, strict: newStrict } : b))
             );
         } catch (error) {
-            setMessage("Failed to update strict setting");
+            setMessage("failed to update strict setting");
             console.error(error);
         }
     };
@@ -177,7 +177,7 @@ function Bundles({ userId, token }: BundleProps) {
             await axios.delete(`http://localhost:8888/api/bundles/${bundleId}`);
             setBundles(prev => prev.filter(b => b.id !== bundleId));
         } catch (error) {
-            setMessage("Failed to delete bundle");
+            setMessage("failed to delete bundle");
             console.error(error);
         }
     };
@@ -287,7 +287,7 @@ function Bundles({ userId, token }: BundleProps) {
                   key={song.id}
                   onClick={() => {
                     setIntroId(song.id);
-                    setIntroQuery(`${song.name} — ${song.artists.map(a => a.name).join(", ")}`);
+                    setIntroQuery(`${song.name}, ${song.album} — ${song.artists.map(a => a.name).join(", ")}`);
                     setIntroResults([]);
                   }}
                   style={{ cursor: "pointer", padding: "4px 0" }}
@@ -319,7 +319,7 @@ function Bundles({ userId, token }: BundleProps) {
                   key={song.id}
                   onClick={() => {
                     setMainId(song.id);
-                    setMainQuery(`${song.name} — ${song.artists.map(a => a.name).join(", ")}`);
+                    setMainQuery(`${song.name}, ${song.album} — ${song.artists.map(a => a.name).join(", ")}`);
                     setMainResults([]);
                   }}
                   style={{ cursor: "pointer", padding: "4px 0" }}
