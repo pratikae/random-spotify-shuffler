@@ -37,7 +37,7 @@ function Search({ userId, token }: SearchProps) {
   const [showNew, setShowNew] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
-
+  const [selectAll, setSelectAll] = useState(false);
 
   const navigate = useNavigate();
 
@@ -202,6 +202,16 @@ function Search({ userId, token }: SearchProps) {
     }
   };
 
+  const toggleSelectAll = () => {
+    if (selectAll) {
+      setSelectedTracks(new Set());
+    } else {
+      const allIds = new Set(searchResults.map((track) => track.id));
+      setSelectedTracks(allIds);
+    }
+    setSelectAll(!selectAll);
+  };
+
   const renderInput = () => {
     if (selectedCategory === "artist") {
       return (
@@ -299,6 +309,7 @@ function Search({ userId, token }: SearchProps) {
     return null;
   };
 
+  // todo: make sure every song in the query is displayed, be able to search multiple times/remove filters from search (-)
   return (
     <div style={{ textAlign: "center", marginTop: "50px" }}>
       <h2>search by category</h2>
@@ -333,6 +344,7 @@ function Search({ userId, token }: SearchProps) {
         </button>
       </div>
 
+      {/* search results */}
       {searchResults.length > 0 && (
         <div
           style={{
@@ -344,6 +356,9 @@ function Search({ userId, token }: SearchProps) {
           }}
         >
           <h3>results !</h3>
+          <button onClick={toggleSelectAll} style={{ marginBottom: "10px" }}>
+            {selectAll ? "deselect all" : "select all"}
+          </button>
           <ul style={{ listStyleType: "none", padding: 0 }}>
             {searchResults.map((track) => (
               <li key={track.id} style={{ marginBottom: "8px" }}>
