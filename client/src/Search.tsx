@@ -15,6 +15,12 @@ interface Track {
   artists: { id: string; name: string }[];
 }
 
+interface Playlist {
+  id: string;
+  name: string;
+  num_tracks: number;
+}
+
 interface SearchProps {
   userId: string;
   token: string | null;
@@ -32,7 +38,31 @@ function Search({ userId, token }: SearchProps) {
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [selectAll, setSelectAll] = useState(false);
 
+  // missing states
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [showExisting, setShowExisting] = useState(false);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState("");
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+
   const navigate = useNavigate();
+
+  // fetch playlists when user opens "existing" section
+  useEffect(() => {
+    if (!showExisting || !token || !userId) return;
+    const fetchPlaylists = async () => {
+      try {
+        const res = await axios.get<Playlist[]>(`http://localhost:8888/api/playlists`, {
+          params: { user_id: userId, token },
+        });
+        setPlaylists(res.data);
+      } catch (err) {
+        console.error("error fetching playlists", err);
+        setPlaylists([]);
+      }
+    };
+    fetchPlaylists();
+  }, [showExisting, token, userId]);
 
   // artist autocomplete
   useEffect(() => {
@@ -117,6 +147,68 @@ function Search({ userId, token }: SearchProps) {
   const clearTimePeriod = () => {
     setStartYear("");
     setEndYear("");
+  };
+
+  const doAddToQueue = async () => {
+    try {
+      await axios.post("http://localhost:8888/api/queue", {
+        track_ids: Array.from(selectedTracks),
+        token: token
+      });
+      setMessage({ text: "added to queue", type: "success" });
+    } catch (e) {
+      console.error("error adding to queue", e);
+      setMessage({ text: "error adding to queue", type: "error" });
+    }
+  };
+
+  const doCreateNewPlaylist = async () => {
+    if (!newPlaylistName.trim()) return;
+    try {
+      await axios.post("http://localhost:8888/api/playlist/new", {
+        name: newPlaylistName.trim(),
+        track_ids: Array.from(selectedTracks),
+        token: token,
+        user_id: userId
+      });
+      setMessage({ text: "playlist created", type: "success" });
+      setNewPlaylistName("");  
+      setShowNew(false);   
+    } catch (e) {
+      console.error("error creating playlist", e);
+      setMessage({ text: "error creating playlist", type: "error" });
+    }
+  };
+
+  const doAddToExistingPlaylist = async () => {
+    if (!selectedPlaylistId) return;
+    try {
+      await axios.post("http://localhost:8888/api/playlist/add_tracks", {
+        playlist_id: selectedPlaylistId,
+        track_ids: Array.from(selectedTracks),
+        token: token
+      });
+      setMessage({ text: "tracks added to playlist", type: "success" });
+      setSelectedPlaylistId(""); 
+      setShowExisting(false); 
+    } catch (err) {
+      console.error("failed to add tracks to playlist", err);
+      setMessage({ text: "error adding to playlist", type: "error" });
+    }
+  };
+
+  const doRemoveFromLiked = async () => {
+    try {
+      await axios.post("http://localhost:8888/api/remove_liked", {
+        track_ids: Array.from(selectedTracks),
+        token: token,
+        user_id: userId
+      });
+      setMessage({ text: "removed from liked songs", type: "success" });
+    } catch (e) {
+      console.error("error removing from liked", e);
+      setMessage({ text: "error removing from liked", type: "error" });
+    }
   };
 
   const renderInput = () => {
@@ -253,11 +345,66 @@ function Search({ userId, token }: SearchProps) {
                     checked={selectedTracks.has(track.id)}
                     onChange={() => toggleTrack(track.id)}
                   />{" "}
-                  {track.name} – {track.artists.map((a) => a.name).join(", ")}
+                  {track.name} - {track.artists.map((a) => a.name).join(", ")}
                 </label>
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {searchResults.length > 0 && (
+        <div style={{ marginTop: "20px" }}>
+          <button onClick={doAddToQueue}>add to queue</button>{" "}
+          <button onClick={() => {setShowNew(!showNew); setShowExisting(false);}}>
+            make new playlist
+          </button>{" "}
+          <button onClick={() => {setShowExisting(!showExisting); setShowNew(false);}}>
+            add to existing playlist
+          </button>{" "}
+          <button onClick={doRemoveFromLiked}>remove from liked</button>{" "}
+
+          {/* new playlist input */}
+          {showNew && (
+            <div style={{ marginTop: "10px" }}>
+              <input
+                type="text"
+                placeholder="enter new playlist name"
+                value={newPlaylistName}
+                onChange={(e) => setNewPlaylistName(e.target.value)}
+              />
+              <button
+                onClick={doCreateNewPlaylist}
+                style={{ marginLeft: "10px" }}
+              >
+                create
+              </button>
+            </div>
+          )}
+
+          {/* existing playlist dropdown */}
+          {showExisting && (
+            <div style={{ marginTop: "10px" }}>
+              <select
+                value={selectedPlaylistId}
+                onChange={(e) => setSelectedPlaylistId(e.target.value)}
+              >
+                <option value="">select a playlist</option>
+                {playlists.map((pl) => (
+                  <option key={pl.id} value={pl.id}>
+                    {pl.name} ({pl.num_tracks} tracks)
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={doAddToExistingPlaylist}
+                style={{ marginLeft: "10px" }}
+                disabled={!selectedPlaylistId}
+              >
+                add
+              </button>
+            </div>
+          )}
         </div>
       )}
 
