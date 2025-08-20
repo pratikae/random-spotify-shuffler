@@ -277,7 +277,6 @@ def api_search_category():
     genre = data.get("genre")
     start_year = data.get("start_year")
     end_year = data.get("end_year")
-    limit = int(data.get("limit", 50))
 
     db = SessionLocal()
 
@@ -303,7 +302,9 @@ def api_search_category():
         track_map = {}
         for track in all_tracks:
             track_map[track.id] = track
-        unique_tracks = list(track_map.values())[:limit]
+        unique_tracks = list(track_map.values())
+        
+        print(unique_tracks)
 
         return jsonify([
             {
