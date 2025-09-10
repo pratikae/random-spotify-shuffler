@@ -290,7 +290,7 @@ function Bundles({ userId, token }: BundleProps) {
                     setIntroQuery(`${song.name}, ${song.album} — ${song.artists.map(a => a.name).join(", ")}`);
                     setIntroResults([]);
                   }}
-                  style={{ cursor: "pointer", padding: "4px 0" }}
+                  style={{ cursor: "pointer", padding: "4px 0", borderBottom: "1px solid #eee" }}
                 >
                   {song.name} — {song.artists.map(a => a.name).join(", ")}
                 </li>
