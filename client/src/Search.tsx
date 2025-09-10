@@ -1,8 +1,27 @@
+// search.tsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
-const categories = ["artist", "time period"];
+const categories = ["artist", "time period", "genre"];
+
+// dropdown styles
+const dropdownStyle: React.CSSProperties = {
+  listStyleType: "none",
+  margin: 0,
+  padding: "0.5rem",
+  border: "1px solid #ccc",
+  maxHeight: "150px",
+  overflowY: "auto",
+  textAlign: "left",
+  width: "300px",
+  marginLeft: "auto",
+  marginRight: "auto",
+  backgroundColor: "white",
+  position: "relative",
+  zIndex: 10,
+  fontSize: "0.9rem",
+};
 
 interface Artist {
   id: string;
@@ -32,24 +51,52 @@ function Search({ userId, token }: SearchProps) {
   const [artistInputs, setArtistInputs] = useState<string[]>([""]);
   const [startYear, setStartYear] = useState("");
   const [endYear, setEndYear] = useState("");
+  
+  // Genre states
+  const [selectedGenre, setSelectedGenre] = useState("");
+  const [customGenreInput, setCustomGenreInput] = useState("");
+  const [genreResults, setGenreResults] = useState<string[]>([]);
+  const [topGenres, setTopGenres] = useState<string[]>([]);
+  const [allGenres, setAllGenres] = useState<string[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [selectAll, setSelectAll] = useState(false);
-
+  
   // missing states
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [showExisting, setShowExisting] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState("");
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-
+  
   const navigate = useNavigate();
+
+  // fetch genres when genre category is selected
+  useEffect(() => {
+    if (selectedCategory !== "genre" || !userId) return;
+    
+    const fetchGenres = async () => {
+      try {
+        const res = await axios.get(`http://localhost:8888/api/get_genres?user_id=${userId}`);
+        setTopGenres(res.data.top_genres || []);
+        setAllGenres(res.data.all_genres || []);
+      } catch (err) {
+        console.error("error fetching genres", err);
+        setTopGenres([]);
+        setAllGenres([]);
+      }
+    };
+    
+    fetchGenres();
+  }, [selectedCategory, userId]);
 
   // fetch playlists when user opens "existing" section
   useEffect(() => {
     if (!showExisting || !token || !userId) return;
+    
     const fetchPlaylists = async () => {
       try {
         const res = await axios.get<Playlist[]>(`http://localhost:8888/api/playlists`, {
@@ -61,6 +108,7 @@ function Search({ userId, token }: SearchProps) {
         setPlaylists([]);
       }
     };
+    
     fetchPlaylists();
   }, [showExisting, token, userId]);
 
@@ -86,6 +134,23 @@ function Search({ userId, token }: SearchProps) {
     fetchArtists();
   }, [selectedCategory, artistInputs]);
 
+  // genre autocomplete for custom input
+  useEffect(() => {
+    if (selectedCategory !== "genre" || customGenreInput.length < 2 || selectedGenre !== "other") {
+      setGenreResults([]);
+      return;
+    }
+
+    const filtered = allGenres
+      .filter(genre => 
+        genre.toLowerCase().includes(customGenreInput.toLowerCase()) &&
+        !topGenres.map(g => g.toLowerCase()).includes(genre.toLowerCase())
+      )
+      .slice(0, 10);
+    
+    setGenreResults(filtered);
+  }, [selectedCategory, customGenreInput, selectedGenre, allGenres, topGenres]);
+
   const doArtistSelect = (artist: Artist, index: number) => {
     const updated = [...artistInputs];
     updated[index] = artist.name;
@@ -93,15 +158,26 @@ function Search({ userId, token }: SearchProps) {
     setArtistResults([]);
   };
 
+  const doGenreSelect = (genre: string) => {
+    setCustomGenreInput(genre);
+    setGenreResults([]);
+  };
+
   const doSearch = async () => {
     setLoading(true);
     try {
       const payload: any = {};
+      
       if (selectedCategory === "artist") {
         payload.artists = artistInputs.filter((a) => a.trim() !== "");
       } else if (selectedCategory === "time period") {
         payload.start_year = startYear;
         payload.end_year = endYear;
+      } else if (selectedCategory === "genre") {
+        const genreToSearch = selectedGenre === "other" ? customGenreInput : selectedGenre;
+        if (genreToSearch.trim()) {
+          payload.genre = genreToSearch.trim();
+        }
       }
 
       const res = await axios.post<Track[]>(
@@ -109,7 +185,7 @@ function Search({ userId, token }: SearchProps) {
         payload,
         { headers: { "Content-Type": "application/json" } }
       );
-
+      
       setSearchResults(res.data);
     } catch (error) {
       console.error("Error searching:", error);
@@ -149,6 +225,11 @@ function Search({ userId, token }: SearchProps) {
     setEndYear("");
   };
 
+  const clearGenre = () => {
+    setSelectedGenre("");
+    setCustomGenreInput("");
+  };
+
   const doAddToQueue = async () => {
     try {
       await axios.post("http://localhost:8888/api/queue", {
@@ -164,6 +245,7 @@ function Search({ userId, token }: SearchProps) {
 
   const doCreateNewPlaylist = async () => {
     if (!newPlaylistName.trim()) return;
+    
     try {
       await axios.post("http://localhost:8888/api/playlist/new", {
         name: newPlaylistName.trim(),
@@ -172,8 +254,8 @@ function Search({ userId, token }: SearchProps) {
         user_id: userId
       });
       setMessage({ text: "playlist created", type: "success" });
-      setNewPlaylistName("");  
-      setShowNew(false);   
+      setNewPlaylistName("");
+      setShowNew(false);
     } catch (e) {
       console.error("error creating playlist", e);
       setMessage({ text: "error creating playlist", type: "error" });
@@ -182,6 +264,7 @@ function Search({ userId, token }: SearchProps) {
 
   const doAddToExistingPlaylist = async () => {
     if (!selectedPlaylistId) return;
+    
     try {
       await axios.post("http://localhost:8888/api/playlist/add_tracks", {
         playlist_id: selectedPlaylistId,
@@ -189,10 +272,10 @@ function Search({ userId, token }: SearchProps) {
         token: token
       });
       setMessage({ text: "tracks added to playlist", type: "success" });
-      setSelectedPlaylistId(""); 
-      setShowExisting(false); 
-    } catch (err) {
-      console.error("failed to add tracks to playlist", err);
+      setSelectedPlaylistId("");
+      setShowExisting(false);
+    } catch (e) {
+      console.error("error adding to existing playlist", e);
       setMessage({ text: "error adding to playlist", type: "error" });
     }
   };
@@ -229,20 +312,30 @@ function Search({ userId, token }: SearchProps) {
                 autoComplete="off"
               />
               {i === artistInputs.length - 1 && (
-                <button onClick={() => setArtistInputs([...artistInputs, ""])} style={{ marginLeft: "5px" }}>
+                <button
+                  onClick={() => setArtistInputs([...artistInputs, ""])}
+                  style={{ marginLeft: "5px" }}
+                >
                   +
                 </button>
               )}
-              <button onClick={() => removeArtistFilter(i)} style={{ marginLeft: "5px" }}>
+              <button
+                onClick={() => removeArtistFilter(i)}
+                style={{ marginLeft: "5px" }}
+              >
                 -
               </button>
               {i === artistInputs.length - 1 && artistResults.length > 0 && (
-                <ul style={{ listStyleType: "none", padding: "5px", margin: 0 }}>
+                <ul style={dropdownStyle}>
                   {artistResults.map((artist) => (
                     <li
                       key={artist.id}
                       onClick={() => doArtistSelect(artist, i)}
-                      style={{ cursor: "pointer", padding: "4px" }}
+                      style={{ 
+                        cursor: "pointer", 
+                        padding: "4px 0",
+                        borderBottom: "1px solid #eee"
+                      }}
                     >
                       {artist.name}
                     </li>
@@ -286,13 +379,78 @@ function Search({ userId, token }: SearchProps) {
       );
     }
 
+    if (selectedCategory === "genre") {
+      return (
+        <div style={{ marginTop: "20px" }}>
+          <div style={{ marginBottom: "15px" }}>
+            <label>
+              select from your top genres:{" "}
+              <select
+                value={selectedGenre}
+                onChange={(e) => {
+                  setSelectedGenre(e.target.value);
+                  if (e.target.value !== "other") {
+                    setCustomGenreInput("");
+                    setGenreResults([]);
+                  }
+                }}
+              >
+                <option value="">-- select genre --</option>
+                {topGenres.map((genre) => (
+                  <option key={genre} value={genre}>
+                    {genre}
+                  </option>
+                ))}
+                <option value="other">other...</option>
+              </select>
+            </label>
+          </div>
+          
+          {selectedGenre === "other" && (
+            <div style={{ marginBottom: "10px" }}>
+              <input
+                type="text"
+                placeholder="enter custom genre"
+                value={customGenreInput}
+                onChange={(e) => setCustomGenreInput(e.target.value)}
+                autoComplete="off"
+                style={{ width: "200px" }}
+              />
+              {genreResults.length > 0 && (
+                <ul style={dropdownStyle}>
+                  {genreResults.map((genre, index) => (
+                    <li
+                      key={index}
+                      onClick={() => doGenreSelect(genre)}
+                      style={{ 
+                        cursor: "pointer", 
+                        padding: "4px 0",
+                        borderBottom: "1px solid #eee"
+                      }}
+                    >
+                      {genre}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          
+          {(selectedGenre && selectedGenre !== "other") || customGenreInput ? (
+            <button onClick={clearGenre} style={{ marginTop: "10px" }}>
+              clear
+            </button>
+          ) : null}
+        </div>
+      );
+    }
+
     return null;
   };
 
   return (
     <div style={{ textAlign: "center", marginTop: "50px" }}>
       <h2>search by category</h2>
-
       <label>
         select a category:{" "}
         <select
@@ -302,7 +460,10 @@ function Search({ userId, token }: SearchProps) {
             setArtistInputs([""]);
             setStartYear("");
             setEndYear("");
+            setSelectedGenre("");
+            setCustomGenreInput("");
             setArtistResults([]);
+            setGenreResults([]);
           }}
         >
           <option value="">-- select --</option>
@@ -373,10 +534,7 @@ function Search({ userId, token }: SearchProps) {
                 value={newPlaylistName}
                 onChange={(e) => setNewPlaylistName(e.target.value)}
               />
-              <button
-                onClick={doCreateNewPlaylist}
-                style={{ marginLeft: "10px" }}
-              >
+              <button onClick={doCreateNewPlaylist} style={{ marginLeft: "10px" }}>
                 create
               </button>
             </div>

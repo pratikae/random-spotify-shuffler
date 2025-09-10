@@ -63,7 +63,6 @@ class Artist(Base):
     __tablename__ = "artists"
     id = Column(String, primary_key=True)
     name = Column(String)
-    genres = Column(String) 
 
     tracks = relationship("Track", secondary=track_artist_table, back_populates="artists")
     genres = relationship("Genre", secondary=artist_genre_table, back_populates="artists")

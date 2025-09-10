@@ -4,7 +4,31 @@ from flask import jsonify
 from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, Genre
 from sqlalchemy.orm.exc import NoResultFound
 
-def cache_liked_songs(sp, user_id):
+def fetch_artist_genres(sp, artist_ids):
+    """Fetch full artist details including genres from Spotify API"""
+    artist_details = {}
+    artist_ids_list = list(artist_ids)
+    
+    print(f"Fetching genres for {len(artist_ids_list)} unique artists...")
+    
+    # spotify only allows up to 50 artists per request
+    for i in range(0, len(artist_ids_list), 50):
+        batch = artist_ids_list[i:i+50]
+        try:
+            print(f"Fetching batch {i//50 + 1}/{(len(artist_ids_list)-1)//50 + 1}")
+            results = sp.artists(batch)
+            for artist in results['artists']:
+                if artist:  # mae sure artist data exists
+                    artist_details[artist['id']] = artist
+                    print(f"Fetched {artist['name']}: {len(artist.get('genres', []))} genres")
+        except Exception as e:
+            print(f"Error fetching artist batch {i//50 + 1}: {e}")
+    
+    print(f"Successfully fetched details for {len(artist_details)} artists")
+    return artist_details
+
+# cache liked songs and playlists
+def cache_all_music_data(sp, user_id):
     db = SessionLocal()
     
     user = db.query(User).filter_by(id=user_id).first()
@@ -12,54 +36,93 @@ def cache_liked_songs(sp, user_id):
         user = User(id=user_id)
         db.add(user)
         db.commit()
-        
+    
+    # get all music data first
     saved_tracks = get_saved_songs(sp)
-
+    playlists_data = get_playlists(sp)
+    
+    # get all unique artist ids from all sources
+    all_artist_ids = set()
+    all_track_data = []
+    
+    # saved tracks
     for item in saved_tracks:
+        all_track_data.append(('saved', item))
+        for artist_data in item.get("artists", []):
+            all_artist_ids.add(artist_data["id"])
+    
+    # playlists
+    playlist_tracks_data = {}
+    for playlist_obj in playlists_data:
+        playlist_id = playlist_obj["id"]
+        print(f"Fetching tracks for playlist: {playlist_obj['name']}")
+        playlist_tracks = get_songs(sp, playlist_id)
+        playlist_tracks_data[playlist_id] = {
+            'info': playlist_obj,
+            'tracks': playlist_tracks
+        }
+        
+        for track_data in playlist_tracks:
+            if track_data and track_data.get("type") == "track" and track_data.get("id"):
+                all_track_data.append(('playlist', track_data, playlist_id))
+                for artist_data in track_data.get("artists", []):
+                    all_artist_ids.add(artist_data["id"])
+    
+    # get all artist details with genres in batches
+    artist_details = fetch_artist_genres(sp, all_artist_ids)
+    
+    # proccess saved tracks with full artist data
+    for item in saved_tracks:
+        # combine artist data with genres
+        for artist_data in item.get("artists", []):
+            if artist_data["id"] in artist_details:
+                full_artist_data = artist_details[artist_data["id"]]
+                artist_data.update(full_artist_data)
+        
         track = get_or_create_track(item, db)
-        if track not in user.saved_tracks:
+        if track and track not in user.saved_tracks:
             user.saved_tracks.append(track)
-
-    db.commit()
-    db.close()
+    
+    # proccess playlists with full artist data
+    print("Caching playlists with genre data...")
+    for playlist_id, playlist_data in playlist_tracks_data.items():
+        playlist_obj = playlist_data['info']
+        playlist_tracks = playlist_data['tracks']
+        
+        playlist = db.query(Playlist).filter_by(id=playlist_id).first()
+        if not playlist:
+            playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user)
+            db.add(playlist)
+            db.flush()
+        
+        for track_data in playlist_tracks:
+            if not track_data or track_data.get("type") != "track" or not track_data.get("id"):
+                continue
+                
+            # combine artist data with genres
+            for artist_data in track_data.get("artists", []):
+                if artist_data["id"] in artist_details:
+                    full_artist_data = artist_details[artist_data["id"]]
+                    artist_data.update(full_artist_data)
+            
+            with db.no_autoflush:
+                track = get_or_create_track(track_data, db)
+                if track and track not in playlist.tracks:
+                    playlist.tracks.append(track)
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 import threading
 def cache_playlists_async(sp, user_id):
     def worker():
-        db = SessionLocal()
-        user = db.query(User).filter_by(id=user_id).first()
-        if not user:
-            db.close()
-            return
-
-        playlists_data = get_playlists(sp)
-        
-        for playlist_obj in playlists_data:
-            playlist_id = playlist_obj["id"]
-            playlist = db.query(Playlist).filter_by(id=playlist_id).first()
-            if not playlist:
-                playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user)
-                db.add(playlist)
-                db.flush() 
-
-            playlist_tracks = get_songs(sp, playlist_id)
-            for track_data in playlist_tracks:
-                if not track_data or track_data.get("type") != "track":
-                    print(f"skipping non-track or malformed item: {track_data}")
-                    continue
-                if not track_data.get("id"):
-                    print(f"skipping track with missing ID: {track_data}")
-                    continue
-
-                with db.no_autoflush:
-                    track = get_or_create_track(track_data, db)
-                    if track and track not in playlist.tracks:
-                        playlist.tracks.append(track)
-
-                    
-        db.commit()
-        db.close()
-
+        cache_all_music_data(sp, user_id)
+    
     threading.Thread(target=worker).start()
     
 def get_or_create_album(album_data, db):
@@ -78,17 +141,32 @@ def get_or_create_album(album_data, db):
     return album
 
 def get_or_create_artist(artist_data, db):
+    from sqlalchemy.exc import IntegrityError
+    
     artist = db.get(Artist, artist_data["id"])
     if not artist:
         artist = Artist(id=artist_data["id"], name=artist_data["name"])
         db.add(artist)
         
-    if "genres" in artist_data:
+    #  genres if they exist in the artist data
+    if "genres" in artist_data and artist_data["genres"]:
+        print(f"Processing {len(artist_data['genres'])} genres for {artist_data['name']}")
         for genre_name in artist_data["genres"]:
             genre = db.query(Genre).filter_by(name=genre_name).first()
             if not genre:
-                genre = Genre(name=genre_name)
-                db.add(genre)
+                try:
+                    genre = Genre(name=genre_name)
+                    db.add(genre)
+                    db.flush()
+                    print(f"Created new genre: {genre_name}")
+                except IntegrityError:
+                    # if genre already exists, rollback and get it
+                    db.rollback()
+                    genre = db.query(Genre).filter_by(name=genre_name).first()
+                    if not genre:
+                        print(f"Still couldn't find genre {genre_name}, skipping")
+                        continue
+            
             if genre not in artist.genres:
                 artist.genres.append(genre)
                 
