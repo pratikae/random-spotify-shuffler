@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import MiniPlayer from "./MiniPlayer.tsx";
 
 interface Artist {
   id: string;
@@ -11,6 +12,8 @@ interface Track {
   id: string;
   name: string;
   artists: Artist[];
+  album?: string;
+  preview_url?: string | null;
 }
 
 interface Bundle {
@@ -46,6 +49,16 @@ function Bundles({ userId, token }: BundleProps) {
 
   const [strict, setStrict] = useState(false);
   const navigate = useNavigate();
+
+  const [miniPlayer, setMiniPlayer] = useState<{ query: string; label: string } | null>(null);
+
+  const openMiniPlayer = (trackName: string, artists: Artist[]) => {
+    const artistNames = artists.map(a => a.name);
+    setMiniPlayer({
+      query: `${trackName} ${artistNames.join(" ")} audio`,
+      label: `${trackName} — ${artistNames.join(", ")}`,
+    });
+  };
 
   // get bundles, then fetch full tracks for each bundle to show artists
   useEffect(() => {
@@ -194,6 +207,31 @@ function Bundles({ userId, token }: BundleProps) {
             ? `${b.main_song.name} — ${formatArtists(b.main_song.artists)}`
             : b.main_song_id;
 
+        const renderPreviewBtn = (track?: Track) => {
+            if (!track) return null;
+            const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(track.name + " " + track.artists.map(a => a.name).join(" ") + " audio")}`;
+            return (
+                <>
+                    <button
+                        onClick={() => openMiniPlayer(track.name, track.artists)}
+                        style={{ fontSize: "0.75rem", padding: "2px 7px", marginLeft: "8px", cursor: "pointer" }}
+                        title="play in mini player"
+                    >
+                        ▶
+                    </button>
+                    <a
+                        href={ytUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: "0.75rem", padding: "2px 7px", marginLeft: "4px", textDecoration: "none", border: "1px solid #ccc", borderRadius: "3px" }}
+                        title="open on youtube"
+                    >
+                        yt
+                    </a>
+                </>
+            );
+        };
+
         return (
             <div
             key={b.id}
@@ -216,8 +254,12 @@ function Bundles({ userId, token }: BundleProps) {
                 />
                 strict
             </label>
-            <div style={{ fontWeight: 500 }}>{intro}</div>
-            <div>{main}</div>
+            <div style={{ fontWeight: 500, display: "flex", alignItems: "center" }}>
+                {intro}{renderPreviewBtn(b.intro_song)}
+            </div>
+            <div style={{ display: "flex", alignItems: "center" }}>
+                {main}{renderPreviewBtn(b.main_song)}
+            </div>
             <button
                 onClick={() => deleteBundle(b.id)}
                 style={{
@@ -285,14 +327,35 @@ function Bundles({ userId, token }: BundleProps) {
               {introResults.map((song) => (
                 <li
                   key={song.id}
-                  onClick={() => {
-                    setIntroId(song.id);
-                    setIntroQuery(`${song.name}, ${song.album} — ${song.artists.map(a => a.name).join(", ")}`);
-                    setIntroResults([]);
-                  }}
-                  style={{ cursor: "pointer", padding: "4px 0", borderBottom: "1px solid #eee" }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #eee" }}
                 >
-                  {song.name} — {song.artists.map(a => a.name).join(", ")}
+                  <span
+                    onClick={() => {
+                      setIntroId(song.id);
+                      setIntroQuery(`${song.name}, ${song.album} — ${song.artists.map(a => a.name).join(", ")}`);
+                      setIntroResults([]);
+                    }}
+                    style={{ cursor: "pointer", flex: 1 }}
+                  >
+                    {song.name} — {song.artists.map(a => a.name).join(", ")}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openMiniPlayer(song.name, song.artists); }}
+                    style={{ fontSize: "0.7rem", padding: "2px 6px", marginLeft: "6px", cursor: "pointer", flexShrink: 0 }}
+                    title="play in mini player"
+                  >
+                    ▶
+                  </button>
+                  <a
+                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(song.name + " " + song.artists.map(a => a.name).join(" ") + " audio")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ fontSize: "0.7rem", padding: "2px 6px", marginLeft: "4px", textDecoration: "none", border: "1px solid #ccc", borderRadius: "3px", flexShrink: 0 }}
+                    title="open on youtube"
+                  >
+                    yt
+                  </a>
                 </li>
               ))}
             </ul>
@@ -317,14 +380,35 @@ function Bundles({ userId, token }: BundleProps) {
               {mainResults.map((song) => (
                 <li
                   key={song.id}
-                  onClick={() => {
-                    setMainId(song.id);
-                    setMainQuery(`${song.name}, ${song.album} — ${song.artists.map(a => a.name).join(", ")}`);
-                    setMainResults([]);
-                  }}
-                  style={{ cursor: "pointer", padding: "4px 0" }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #eee" }}
                 >
-                  {song.name} — {song.artists.map(a => a.name).join(", ")}
+                  <span
+                    onClick={() => {
+                      setMainId(song.id);
+                      setMainQuery(`${song.name}, ${song.album} — ${song.artists.map(a => a.name).join(", ")}`);
+                      setMainResults([]);
+                    }}
+                    style={{ cursor: "pointer", flex: 1 }}
+                  >
+                    {song.name} — {song.artists.map(a => a.name).join(", ")}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openMiniPlayer(song.name, song.artists); }}
+                    style={{ fontSize: "0.7rem", padding: "2px 6px", marginLeft: "6px", cursor: "pointer", flexShrink: 0 }}
+                    title="play in mini player"
+                  >
+                    ▶
+                  </button>
+                  <a
+                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(song.name + " " + song.artists.map(a => a.name).join(" ") + " audio")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ fontSize: "0.7rem", padding: "2px 6px", marginLeft: "4px", textDecoration: "none", border: "1px solid #ccc", borderRadius: "3px", flexShrink: 0 }}
+                    title="open on youtube"
+                  >
+                    yt
+                  </a>
                 </li>
               ))}
             </ul>
@@ -359,6 +443,14 @@ function Bundles({ userId, token }: BundleProps) {
 
         {message && <p>{message}</p>}
       <button onClick={() => navigate("/")}>back</button>
+
+      {miniPlayer && (
+        <MiniPlayer
+          query={miniPlayer.query}
+          trackLabel={miniPlayer.label}
+          onClose={() => setMiniPlayer(null)}
+        />
+      )}
     </div>
   );
 }

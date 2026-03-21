@@ -79,6 +79,7 @@ class Track(Base):
     id = Column(String, primary_key=True)
     name = Column(String)
     album_id = Column(String, ForeignKey("albums.id"), nullable=True)
+    preview_url = Column(String, nullable=True)
     
     album = relationship("Album", back_populates="tracks")
     artists = relationship("Artist", secondary=track_artist_table, back_populates="tracks")
@@ -114,3 +115,13 @@ class Bundle(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # migrate: add preview_url column if it doesn't exist yet
+    with engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(
+            __import__("sqlalchemy").text("PRAGMA table_info(tracks)")
+        )]
+        if "preview_url" not in cols:
+            conn.execute(__import__("sqlalchemy").text(
+                "ALTER TABLE tracks ADD COLUMN preview_url TEXT"
+            ))
+            conn.commit()

@@ -187,13 +187,16 @@ def get_or_create_track(track_data, db):
         track = Track(
             id=track_id,
             name=track_data["name"],
-            album=album
+            album=album,
+            preview_url=track_data.get("preview_url")
         )
         db.add(track)
         for artist_data in track_data.get("artists", []):
             artist = get_or_create_artist(artist_data, db)
             track.artists.append(artist)
         db.flush()
+    elif track.preview_url is None and track_data.get("preview_url"):
+        track.preview_url = track_data.get("preview_url")
     return track
 
 def get_or_create_podcast_episode(episode_data, db):
@@ -413,12 +416,6 @@ def get_bundles(user_id: str, db_session):
         })
     return bundles
 
-def fetch_genres(db):
-    genre_names = db.query(Genre.name).distinct().all()
-    print("Raw genre names from DB:", genre_names)
-    genres = sorted({name for (name,) in genre_names})  # get everything unique genre and sort
-    return genres
-
 def serialize_track(track):
         return {
             "id": track["id"],
@@ -454,7 +451,6 @@ def get_tracks_by_genres(session, genre_list: list[str]):
         .filter(Genre.name.in_(genre_list))
         .all()
     )
-    
 
 def reset_scheduler(queue_scheduler):
     if queue_scheduler.running:

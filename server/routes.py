@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify, redirect, current_app
 import random
+import os
+import requests as http_requests
 import spotipy
 import spotify_helpers
 from scheduler import queue_scheduler
-from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, Genre, track_artist_table, playlist_track_table, saved_track_table
-from spotify_helpers import cache_all_music_data, apply_bundles, fetch_genres, get_tracks_by_artists, get_tracks_by_genres, get_tracks_by_release_year, get_playlists
+from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, Genre, track_artist_table, playlist_track_table, saved_track_table, artist_genre_table
+from spotify_helpers import cache_all_music_data, apply_bundles, get_tracks_by_artists, get_tracks_by_genres, get_tracks_by_release_year, get_playlists
 from spotipy import Spotify
 
 routes = Blueprint("routes", __name__)
@@ -283,41 +285,61 @@ def api_delete_bundle(bundle_id):
 def api_search_category():
     data = request.get_json()
     artists = data.get("artists", [])
-    genre = data.get("genre")
+    genres = data.get("genres", [])
     start_year = data.get("start_year")
     end_year = data.get("end_year")
-    
+    liked_only = data.get("liked_only", False)
+    user_id = data.get("user_id")
+
     db = SessionLocal()
     try:
-        all_tracks = []
-        
-        # artists
+        track_sets = []
+        track_objects = {}
+
         if artists:
             artist_tracks = get_tracks_by_artists(db, artists)
-            all_tracks.extend(artist_tracks)
-        
-        # genres
-        if genre:
-            genre_tracks = get_tracks_by_genres(db, [genre])
-            all_tracks.extend(genre_tracks)
-        
-        # release date
+            track_sets.append(set(t.id for t in artist_tracks))
+            for t in artist_tracks:
+                track_objects[t.id] = t
+
+        if genres:
+            genre_tracks = get_tracks_by_genres(db, genres)
+            track_sets.append(set(t.id for t in genre_tracks))
+            for t in genre_tracks:
+                track_objects[t.id] = t
+
         if start_year and end_year:
             year_tracks = get_tracks_by_release_year(db, int(start_year), int(end_year))
-            all_tracks.extend(year_tracks)
-        
-        # get rid of any duplicate tracks
-        track_map = {}
-        for track in all_tracks:
-            track_map[track.id] = track
-        unique_tracks = list(track_map.values())
-        
-        print(unique_tracks)
+            track_sets.append(set(t.id for t in year_tracks))
+            for t in year_tracks:
+                track_objects[t.id] = t
+
+        if liked_only and user_id:
+            user = db.query(User).filter_by(id=user_id).first()
+            if user:
+                liked_tracks = user.saved_tracks
+                liked_ids = set(t.id for t in liked_tracks)
+                if not track_sets:
+                    for t in liked_tracks:
+                        track_objects[t.id] = t
+                track_sets.append(liked_ids)
+
+        if not track_sets:
+            return jsonify([])
+
+        # intersect all filter results so combined filters narrow down results
+        common_ids = track_sets[0]
+        for s in track_sets[1:]:
+            common_ids = common_ids & s
+
+        unique_tracks = [track_objects[tid] for tid in common_ids]
+
         return jsonify([
             {
                 "id": t.id,
                 "name": t.name,
-                "artists": [{"id": a.id, "name": a.name} for a in t.artists]
+                "artists": [{"id": a.id, "name": a.name} for a in t.artists],
+                "preview_url": t.preview_url
             }
             for t in unique_tracks
         ])
@@ -377,13 +399,8 @@ def api_search_songs():
                 "id": s.id,
                 "name": s.name,
                 "album": s.album.name if s.album else None,
-                "artists": [
-                    {
-                        "id": artist.id,
-                        "name": artist.name
-                    }
-                    for artist in s.artists
-                ]
+                "artists": [{"id": a.id, "name": a.name} for a in s.artists],
+                "preview_url": s.preview_url
             }
             for s in matches
         ])
@@ -406,7 +423,8 @@ def api_get_track():
         return jsonify({
             "id": track.id,
             "name": track.name,
-            "artists": [{"id": a.id, "name": a.name} for a in track.artists]
+            "artists": [{"id": a.id, "name": a.name} for a in track.artists],
+            "preview_url": track.preview_url
         })
     finally:
         db.close()
@@ -674,6 +692,29 @@ def api_search_genres():
     finally:
         db.close()
 
+@routes.route("/api/youtube_search", methods=["GET"])
+def youtube_search():
+    query = request.args.get("q", "")
+    if not query:
+        return jsonify({"error": "no query"}), 400
+
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if not api_key:
+        return jsonify({"error": "YouTube API key not configured"}), 500
+
+    try:
+        res = http_requests.get(
+            "https://www.googleapis.com/youtube/v3/search",
+            params={"part": "snippet", "maxResults": 1, "q": query, "type": "video", "key": api_key}
+        )
+        items = res.json().get("items", [])
+        if not items:
+            return jsonify({"error": "no results"}), 404
+        return jsonify({"video_id": items[0]["id"]["videoId"]})
+    except Exception as e:
+        print(f"youtube search error: {e}")
+        return jsonify({"error": "search failed"}), 500
+
 @routes.route("/api/cache/refresh", methods=["POST"])
 def api_cache_refresh():
     data = request.get_json()
@@ -703,6 +744,8 @@ def api_cache_clear(sp, user_id):
         # this clears the joint tables, which was the issue earlier?
         db.execute(track_artist_table.delete())
         db.execute(playlist_track_table.delete())
+        db.execute(artist_genre_table.delete())
+
         
         # delete any remaining rows
         db.query(Track).filter(~Track.saved_by_users.any(), ~Track.playlists.any()).delete(synchronize_session=False)
@@ -710,6 +753,7 @@ def api_cache_clear(sp, user_id):
         db.query(Album).filter(~Album.tracks.any()).delete(synchronize_session=False)
         db.query(PodcastEpisode).filter(~PodcastEpisode.show.has()).delete(synchronize_session=False)
         db.query(Show).filter(~Show.episodes.any()).delete(synchronize_session=False)
+        db.query(Genre).filter(~Genre.artists.any()).delete(synchronize_session=False)
         
         db.commit()
     
