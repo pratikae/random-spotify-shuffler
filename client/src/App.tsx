@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./Login.tsx";
-import Menu from "./Menu.tsx";
+import Layout from "./Layout.tsx";
 import Shuffler from "./Shuffler.tsx";
 import Bundles from "./Bundles.tsx";
 import Search from "./Search.tsx";
@@ -26,55 +26,40 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const handleLogout = () => {
+    setUserId(null);
+    setAccessToken(null);
+    setDisplayName(null);
+  };
+
+  const withLayout = (component: React.ReactNode) => {
+    if (!userId || !accessToken) return <Navigate to="/" replace />;
+    return (
+      <Layout
+        userId={userId}
+        token={accessToken}
+        userName={displayName ?? userId}
+        onLogout={handleLogout}
+      >
+        {component}
+      </Layout>
+    );
+  };
+
   return (
     <BrowserRouter>
       <Routes>
         <Route
           path="/"
           element={
-            userId && accessToken ? (
-              <Menu
-                userName={displayName ?? ""}
-                userId={userId}
-                token={accessToken}
-                onLogout={() => {
-                  setUserId(null);
-                  setAccessToken(null);
-                  setDisplayName(null);
-                }}
-              />
-            ) : (
-              <Login />
-            )
+            userId && accessToken
+              ? <Navigate to="/shuffler" replace />
+              : <Login />
           }
         />
-        <Route
-          path="/shuffler"
-          element={
-            userId && accessToken ? (
-              <Shuffler userId={userId} token={accessToken} />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/bundles"
-          element={
-            userId && accessToken ? (
-              <Bundles userId={userId} token={accessToken} />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route path="/search" element={
-          userId && accessToken ? (
-              <Search userId={userId} token={accessToken} />
-            ) : (
-              <Navigate to="/" replace />
-            )
-        } />
+        <Route path="/shuffler" element={withLayout(<Shuffler userId={userId ?? ""} token={accessToken} />)} />
+        <Route path="/bundles" element={withLayout(<Bundles userId={userId ?? ""} token={accessToken} />)} />
+        <Route path="/search" element={withLayout(<Search userId={userId ?? ""} token={accessToken} />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

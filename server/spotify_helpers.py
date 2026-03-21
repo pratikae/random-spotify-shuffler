@@ -91,7 +91,9 @@ def cache_all_music_data(sp, user_id):
         
         playlist = db.query(Playlist).filter_by(id=playlist_id).first()
         if not playlist:
-            playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user, snapshot_id=playlist_obj.get("snapshot_id"))
+            images = playlist_obj.get("images", [])
+            image_url = images[0]["url"] if images else None
+            playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user, snapshot_id=playlist_obj.get("snapshot_id"), image_url=image_url)
             db.add(playlist)
             db.flush()
         
@@ -257,18 +259,27 @@ def _sync_playlists(sp, user, db):
 
         if playlist and playlist.snapshot_id == snapshot_id:
             print(f"playlist '{playlist.name}' unchanged, skipping")
+            # still backfill image_url if it was missing
+            if not playlist.image_url:
+                images = playlist_obj.get("images", [])
+                if images:
+                    playlist.image_url = images[0]["url"]
             continue
 
         print(f"syncing playlist '{playlist_obj['name']}'")
         playlist_tracks = get_songs(sp, playlist_id)
 
         if not playlist:
-            playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user, snapshot_id=snapshot_id)
+            images = playlist_obj.get("images", [])
+            image_url = images[0]["url"] if images else None
+            playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user, snapshot_id=snapshot_id, image_url=image_url)
             db.add(playlist)
             db.flush()
         else:
             playlist.name = playlist_obj["name"]
             playlist.snapshot_id = snapshot_id
+            images = playlist_obj.get("images", [])
+            playlist.image_url = images[0]["url"] if images else playlist.image_url
             playlist.tracks.clear()
             db.flush()
 
@@ -300,13 +311,16 @@ def get_or_create_album(album_data, db):
     album_id = album_data.get("id")
     if not album_id:
         return None
-    
+
     album = db.get(Album, album_data["id"])
     if not album:
+        images = album_data.get("images", [])
+        image_url = images[0]["url"] if images else None
         album = Album(
             id=album_data["id"],
             name=album_data["name"],
-            release_date=album_data["release_date"]
+            release_date=album_data.get("release_date", ""),
+            image_url=image_url
         )
         db.add(album)
     return album
@@ -606,6 +620,13 @@ def get_tracks_by_release_year(db, start_year: int, end_year: int):
         .all()
     )
     
+def get_tracks_by_name(db, name: str):
+    return (
+        db.query(Track)
+        .filter(Track.name.ilike(f"%{name}%"))
+        .all()
+    )
+
 def get_tracks_by_artists(db, artist_names: list[str]):
     return (
         db.query(Track)

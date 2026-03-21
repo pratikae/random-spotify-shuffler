@@ -1,27 +1,9 @@
 // search.tsx
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
 import MiniPlayer from "./MiniPlayer.tsx";
 
 const PAGE_SIZE = 50;
-
-const dropdownStyle: React.CSSProperties = {
-  listStyleType: "none",
-  margin: 0,
-  padding: "0.5rem",
-  border: "1px solid #ccc",
-  maxHeight: "150px",
-  overflowY: "auto",
-  textAlign: "left",
-  width: "300px",
-  marginLeft: "auto",
-  marginRight: "auto",
-  backgroundColor: "white",
-  position: "relative",
-  zIndex: 10,
-  fontSize: "0.9rem",
-};
 
 interface Artist {
   id: string;
@@ -32,6 +14,7 @@ interface Track {
   id: string;
   name: string;
   artists: { id: string; name: string }[];
+  album_image?: string | null;
   preview_url?: string | null;
 }
 
@@ -46,31 +29,75 @@ interface SearchProps {
   token: string | null;
 }
 
-function Search({ userId, token }: SearchProps) {
-  // active filter toggles
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+const inputStyle: React.CSSProperties = {
+  backgroundColor: "#3e3e3e",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  color: "#fff",
+  fontSize: "0.9rem",
+  padding: "8px 12px",
+  outline: "none",
+};
 
-  // artist filter
+const dropdownStyle: React.CSSProperties = {
+  listStyleType: "none",
+  margin: "4px 0 0",
+  padding: "4px",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  maxHeight: "160px",
+  overflowY: "auto",
+  backgroundColor: "#282828",
+  position: "absolute",
+  zIndex: 100,
+  width: "100%",
+  fontSize: "0.85rem",
+};
+
+function Search({ userId, token }: SearchProps) {
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const [songName, setSongName] = useState("");
+
   const [artistInputs, setArtistInputs] = useState<string[]>([""]);
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
   const artistJustSelected = useRef(false);
 
-  // time period filter
   const [startYear, setStartYear] = useState("");
   const [endYear, setEndYear] = useState("");
 
-  // genre filter
   const [genreInputs, setGenreInputs] = useState<string[]>([""]);
   const [genreResults, setGenreResults] = useState<string[]>([]);
   const [allGenres, setAllGenres] = useState<string[]>([]);
   const genreJustSelected = useRef(false);
+
+  const [likedOnly, setLikedOnly] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<Track[]>([]);
+  const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
+  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [miniPlayer, setMiniPlayer] = useState<{ query: string; label: string } | null>(null);
+
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [showExisting, setShowExisting] = useState(false);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState("");
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+
+  const totalPages = Math.ceil(searchResults.length / PAGE_SIZE);
+  const currentPageTracks = searchResults.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const allOnPageSelected = currentPageTracks.length > 0 && currentPageTracks.every((t) => selectedTracks.has(t.id));
+
+  const openMiniPlayer = (trackName: string, artistNames: string[]) => {
+    setMiniPlayer({ query: `${trackName} ${artistNames.join(" ")} audio`, label: `${trackName} — ${artistNames.join(", ")}` });
+  };
 
   const toggleFilter = (filter: string) => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
       if (next.has(filter)) {
         next.delete(filter);
-        // clear state when filter is toggled off
+        if (filter === "song name") { setSongName(""); }
         if (filter === "artist") { setArtistInputs([""]); setArtistResults([]); }
         if (filter === "time period") { setStartYear(""); setEndYear(""); }
         if (filter === "genre") { setGenreInputs([""]); setGenreResults([]); }
@@ -81,106 +108,34 @@ function Search({ userId, token }: SearchProps) {
     });
   };
 
-  const [likedOnly, setLikedOnly] = useState(false);
-
-  const [loading, setLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<Track[]>([]);
-  const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
-  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
-  const [currentPage, setCurrentPage] = useState(0);
-
-  const [miniPlayer, setMiniPlayer] = useState<{ query: string; label: string } | null>(null);
-
-  const openMiniPlayer = (trackName: string, artistNames: string[]) => {
-    setMiniPlayer({
-      query: `${trackName} ${artistNames.join(" ")} audio`,
-      label: `${trackName} — ${artistNames.join(", ")}`,
-    });
-  };
-
-  // playlist states
-  const [newPlaylistName, setNewPlaylistName] = useState("");
-  const [showNew, setShowNew] = useState(false);
-  const [showExisting, setShowExisting] = useState(false);
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState("");
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-
-  const navigate = useNavigate();
-
-  const totalPages = Math.ceil(searchResults.length / PAGE_SIZE);
-  const currentPageTracks = searchResults.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  const allOnPageSelected = currentPageTracks.length > 0 && currentPageTracks.every((t) => selectedTracks.has(t.id));
-
-  // fetch genres on mount
   useEffect(() => {
     if (!userId) return;
-    const fetchGenres = async () => {
-      try {
-        const res = await axios.get(`http://localhost:8888/api/get_genres?user_id=${userId}`);
-        setAllGenres(res.data.all_genres || []);
-      } catch (err) {
-        console.error("error fetching genres", err);
-      }
-    };
-    fetchGenres();
+    axios.get(`http://localhost:8888/api/get_genres?user_id=${userId}`)
+      .then((r) => setAllGenres(r.data.all_genres || []))
+      .catch(() => {});
   }, [userId]);
 
-  // fetch playlists when user opens "existing" section
   useEffect(() => {
     if (!showExisting || !token || !userId) return;
-    const fetchPlaylists = async () => {
-      try {
-        const res = await axios.get<Playlist[]>(`http://localhost:8888/api/playlists`, {
-          params: { user_id: userId, token },
-        });
-        setPlaylists(res.data);
-      } catch (err) {
-        console.error("error fetching playlists", err);
-        setPlaylists([]);
-      }
-    };
-    fetchPlaylists();
+    axios.get<Playlist[]>(`http://localhost:8888/api/get_playlists`, { params: { user_id: userId } })
+      .then((r) => setPlaylists(r.data))
+      .catch(() => setPlaylists([]));
   }, [showExisting, token, userId]);
 
-  // artist autocomplete
   useEffect(() => {
-    if (artistJustSelected.current) {
-      artistJustSelected.current = false;
-      return;
-    }
-    const lastInput = artistInputs[artistInputs.length - 1];
-    if (lastInput.length < 2) {
-      setArtistResults([]);
-      return;
-    }
-    const fetchArtists = async () => {
-      try {
-        const res = await axios.get<Artist[]>(
-          `http://localhost:8888/api/search_artists?query=${encodeURIComponent(lastInput)}`
-        );
-        setArtistResults(res.data);
-      } catch {
-        setArtistResults([]);
-      }
-    };
-    fetchArtists();
+    if (artistJustSelected.current) { artistJustSelected.current = false; return; }
+    const last = artistInputs[artistInputs.length - 1];
+    if (last.length < 2) { setArtistResults([]); return; }
+    axios.get<Artist[]>(`http://localhost:8888/api/search_artists?query=${encodeURIComponent(last)}`)
+      .then((r) => setArtistResults(r.data))
+      .catch(() => setArtistResults([]));
   }, [artistInputs]);
 
-  // genre autocomplete
   useEffect(() => {
-    if (genreJustSelected.current) {
-      genreJustSelected.current = false;
-      return;
-    }
-    const lastInput = genreInputs[genreInputs.length - 1];
-    if (lastInput.length < 2) {
-      setGenreResults([]);
-      return;
-    }
-    const filtered = allGenres
-      .filter((g) => g.toLowerCase().includes(lastInput.toLowerCase()))
-      .slice(0, 10);
-    setGenreResults(filtered);
+    if (genreJustSelected.current) { genreJustSelected.current = false; return; }
+    const last = genreInputs[genreInputs.length - 1];
+    if (last.length < 2) { setGenreResults([]); return; }
+    setGenreResults(allGenres.filter((g) => g.toLowerCase().includes(last.toLowerCase())).slice(0, 10));
   }, [genreInputs, allGenres]);
 
   const doArtistSelect = (artist: Artist, index: number) => {
@@ -191,7 +146,7 @@ function Search({ userId, token }: SearchProps) {
     setArtistResults([]);
   };
 
-  const removeArtistFilter = (index: number) => {
+  const removeArtistInput = (index: number) => {
     const updated = [...artistInputs];
     updated.splice(index, 1);
     if (updated.length === 0) updated.push("");
@@ -207,7 +162,7 @@ function Search({ userId, token }: SearchProps) {
     setGenreResults([]);
   };
 
-  const removeGenreFilter = (index: number) => {
+  const removeGenreInput = (index: number) => {
     const updated = [...genreInputs];
     updated.splice(index, 1);
     if (updated.length === 0) updated.push("");
@@ -218,36 +173,29 @@ function Search({ userId, token }: SearchProps) {
   const doSearch = async () => {
     const filledArtists = artistInputs.filter((a) => a.trim() !== "");
     const filledGenres = genreInputs.filter((g) => g.trim() !== "");
+    const hasSongName = songName.trim() !== "";
     const hasArtist = filledArtists.length > 0;
     const hasTime = startYear !== "" && endYear !== "";
     const hasGenre = filledGenres.length > 0;
 
-    if (!hasArtist && !hasTime && !hasGenre) {
-      setMessage({ text: "please enter at least one filter", type: "error" });
+    if (!hasSongName && !hasArtist && !hasTime && !hasGenre && !likedOnly) {
+      setMessage({ text: "please enable at least one filter", type: "error" });
       return;
     }
 
     setLoading(true);
     setMessage(null);
     try {
-      const payload: any = { user_id: userId, liked_only: likedOnly };
+      const payload: Record<string, unknown> = { user_id: userId, liked_only: likedOnly };
+      if (hasSongName) payload.song_name = songName.trim();
       if (hasArtist) payload.artists = filledArtists;
-      if (hasTime) {
-        payload.start_year = startYear;
-        payload.end_year = endYear;
-      }
+      if (hasTime) { payload.start_year = startYear; payload.end_year = endYear; }
       if (hasGenre) payload.genres = filledGenres;
-
-      const res = await axios.post<Track[]>(
-        "http://localhost:8888/api/search_category",
-        payload,
-        { headers: { "Content-Type": "application/json" } }
-      );
+      const res = await axios.post<Track[]>("http://localhost:8888/api/search_category", payload);
       setSearchResults(res.data);
       setSelectedTracks(new Set());
       setCurrentPage(0);
-    } catch (error) {
-      console.error("Error searching:", error);
+    } catch {
       setSearchResults([]);
     } finally {
       setLoading(false);
@@ -256,33 +204,26 @@ function Search({ userId, token }: SearchProps) {
 
   const toggleTrack = (id: string) => {
     setSelectedTracks((prev) => {
-      const newSet = new Set(prev);
-      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
-      return newSet;
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
     });
   };
 
   const toggleSelectAllOnPage = () => {
     setSelectedTracks((prev) => {
-      const newSet = new Set(prev);
-      if (allOnPageSelected) {
-        currentPageTracks.forEach((t) => newSet.delete(t.id));
-      } else {
-        currentPageTracks.forEach((t) => newSet.add(t.id));
-      }
-      return newSet;
+      const s = new Set(prev);
+      if (allOnPageSelected) { currentPageTracks.forEach((t) => s.delete(t.id)); }
+      else { currentPageTracks.forEach((t) => s.add(t.id)); }
+      return s;
     });
   };
 
   const doAddToQueue = async () => {
     try {
-      await axios.post("http://localhost:8888/api/queue", {
-        track_ids: Array.from(selectedTracks),
-        token: token,
-      });
+      await axios.post("http://localhost:8888/api/queue", { track_ids: Array.from(selectedTracks), token });
       setMessage({ text: "added to queue", type: "success" });
-    } catch (e) {
-      console.error("error adding to queue", e);
+    } catch {
       setMessage({ text: "error adding to queue", type: "error" });
     }
   };
@@ -291,16 +232,11 @@ function Search({ userId, token }: SearchProps) {
     if (!newPlaylistName.trim()) return;
     try {
       await axios.post("http://localhost:8888/api/playlist/new", {
-        name: newPlaylistName.trim(),
-        track_ids: Array.from(selectedTracks),
-        token: token,
-        user_id: userId,
+        name: newPlaylistName.trim(), track_ids: Array.from(selectedTracks), token, user_id: userId,
       });
       setMessage({ text: "playlist created", type: "success" });
-      setNewPlaylistName("");
-      setShowNew(false);
-    } catch (e) {
-      console.error("error creating playlist", e);
+      setNewPlaylistName(""); setShowNew(false);
+    } catch {
       setMessage({ text: "error creating playlist", type: "error" });
     }
   };
@@ -309,15 +245,11 @@ function Search({ userId, token }: SearchProps) {
     if (!selectedPlaylistId) return;
     try {
       await axios.post("http://localhost:8888/api/playlist/add_tracks", {
-        playlist_id: selectedPlaylistId,
-        track_ids: Array.from(selectedTracks),
-        token: token,
+        playlist_id: selectedPlaylistId, track_ids: Array.from(selectedTracks), token,
       });
       setMessage({ text: "tracks added to playlist", type: "success" });
-      setSelectedPlaylistId("");
-      setShowExisting(false);
-    } catch (e) {
-      console.error("error adding to existing playlist", e);
+      setSelectedPlaylistId(""); setShowExisting(false);
+    } catch {
       setMessage({ text: "error adding to playlist", type: "error" });
     }
   };
@@ -325,333 +257,367 @@ function Search({ userId, token }: SearchProps) {
   const doRemoveFromLiked = async () => {
     try {
       await axios.post("http://localhost:8888/api/remove_liked", {
-        track_ids: Array.from(selectedTracks),
-        token: token,
-        user_id: userId,
+        track_ids: Array.from(selectedTracks), token, user_id: userId,
       });
       setMessage({ text: "removed from liked songs", type: "success" });
-    } catch (e) {
-      console.error("error removing from liked", e);
+    } catch {
       setMessage({ text: "error removing from liked", type: "error" });
     }
   };
 
+  const pillBtn = (active: boolean): React.CSSProperties => ({
+    padding: "6px 16px",
+    borderRadius: "500px",
+    border: `1px solid ${active ? "#fff" : "var(--border)"}`,
+    backgroundColor: active ? "#fff" : "transparent",
+    color: active ? "#000" : "var(--muted)",
+    fontSize: "0.85rem",
+    fontWeight: active ? 600 : 400,
+    cursor: "pointer",
+    transition: "all 0.15s",
+  });
+
+  const filterRowStyle: React.CSSProperties = {
+    backgroundColor: "var(--card-bg)",
+    border: "1px solid var(--border)",
+    borderRadius: "8px",
+    padding: "16px",
+    marginTop: "12px",
+  };
+
+  const smallBtn = (variant: "ghost" | "icon"): React.CSSProperties => ({
+    background: "none",
+    border: variant === "ghost" ? "1px solid var(--border)" : "none",
+    borderRadius: "4px",
+    color: "var(--muted)",
+    padding: "4px 8px",
+    fontSize: "0.75rem",
+    cursor: "pointer",
+    flexShrink: 0,
+  });
+
   return (
-    <div style={{ textAlign: "center", marginTop: "50px" }}>
-      <h2>search by category</h2>
-      <p style={{ color: "#666", fontSize: "0.9rem" }}>
-        toggle filters — results will match all of them
-      </p>
+    <div>
+      <h2 style={{ color: "#fff", fontWeight: 700, fontSize: "1.5rem", margin: "0 0 24px" }}>search</h2>
 
-      {/* liked only toggle */}
-      <div style={{ marginTop: "16px" }}>
-        <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={likedOnly}
-            onChange={(e) => setLikedOnly(e.target.checked)}
-            style={{ marginRight: "6px" }}
-          />
-          liked songs only
-        </label>
-      </div>
-
-      {/* filter toggle buttons */}
-      <div style={{ display: "flex", justifyContent: "center", gap: "10px", marginTop: "16px" }}>
-        {["artist", "time period", "genre"].map((f) => (
-          <button
-            key={f}
-            onClick={() => toggleFilter(f)}
-            style={{
-              padding: "6px 14px",
-              borderRadius: "20px",
-              border: "1px solid #999",
-              backgroundColor: activeFilters.has(f) ? "#333" : "transparent",
-              color: activeFilters.has(f) ? "#fff" : "#333",
-              cursor: "pointer",
-              fontSize: "0.9rem",
-            }}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      {/* artist filter */}
-      {activeFilters.has("artist") && (
-        <div style={{ marginTop: "20px" }}>
-          <strong>artist</strong>
-          {artistInputs.map((value, i) => (
-            <div key={i} style={{ marginBottom: "10px" }}>
-              <input
-                type="text"
-                placeholder="enter artist name"
-                value={value}
-                onChange={(e) => {
-                  const updated = [...artistInputs];
-                  updated[i] = e.target.value;
-                  setArtistInputs(updated);
-                }}
-                autoComplete="off"
-              />
-              {i === artistInputs.length - 1 && (
-                <button
-                  onClick={() => setArtistInputs([...artistInputs, ""])}
-                  style={{ marginLeft: "5px" }}
-                >
-                  +
-                </button>
-              )}
-              <button onClick={() => removeArtistFilter(i)} style={{ marginLeft: "5px" }}>
-                -
-              </button>
-              {i === artistInputs.length - 1 && artistResults.length > 0 && (
-                <ul style={dropdownStyle}>
-                  {artistResults.map((artist) => (
-                    <li
-                      key={artist.id}
-                      onClick={() => doArtistSelect(artist, i)}
-                      style={{ cursor: "pointer", padding: "4px 0", borderBottom: "1px solid #eee" }}
-                    >
-                      {artist.name}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+      {/* filter area */}
+      <div
+        style={{
+          backgroundColor: "var(--card-bg)",
+          border: "1px solid var(--border)",
+          borderRadius: "12px",
+          padding: "20px",
+        }}
+      >
+        {/* filter pills */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "16px", alignItems: "center" }}>
+          <span style={{ fontSize: "0.8rem", color: "var(--muted)", marginRight: "4px" }}>filters:</span>
+          {(["song name", "artist", "time period", "genre"] as const).map((f) => (
+            <button key={f} onClick={() => toggleFilter(f)} style={pillBtn(activeFilters.has(f))}>
+              {f}
+            </button>
           ))}
+          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", color: likedOnly ? "var(--accent)" : "var(--muted)", cursor: "pointer", marginLeft: "8px" }}>
+            <input type="checkbox" checked={likedOnly} onChange={(e) => setLikedOnly(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+            liked only
+          </label>
         </div>
-      )}
 
-      {/* time period filter */}
-      {activeFilters.has("time period") && (
-        <div style={{ marginTop: "20px" }}>
-          <strong>time period</strong>
-          <div style={{ marginTop: "8px" }}>
-            <label>
-              start year:{" "}
-              <input
-                type="number"
-                placeholder="e.g. 2000"
-                value={startYear}
-                onChange={(e) => setStartYear(e.target.value)}
-                style={{ marginRight: "10px" }}
-              />
-            </label>
-            <label>
-              end year:{" "}
-              <input
-                type="number"
-                placeholder="e.g. 2012"
-                value={endYear}
-                onChange={(e) => setEndYear(e.target.value)}
-              />
-            </label>
+        {/* song name filter */}
+        {activeFilters.has("song name") && (
+          <div style={filterRowStyle}>
+            <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginBottom: "10px" }}>song name</div>
+            <input
+              type="text"
+              placeholder="e.g. heartless"
+              value={songName}
+              onChange={(e) => setSongName(e.target.value)}
+              style={{ ...inputStyle, width: "100%" }}
+            />
           </div>
-        </div>
-      )}
+        )}
 
-      {/* genre filter */}
-      {activeFilters.has("genre") && (
-        <div style={{ marginTop: "20px" }}>
-          <strong>genre</strong>
-          {genreInputs.map((value, i) => (
-            <div key={i} style={{ marginBottom: "10px" }}>
-              <input
-                type="text"
-                placeholder="enter genre"
-                value={value}
-                onChange={(e) => {
-                  const updated = [...genreInputs];
-                  updated[i] = e.target.value;
-                  setGenreInputs(updated);
-                }}
-                autoComplete="off"
-              />
-              {i === genreInputs.length - 1 && (
-                <button
-                  onClick={() => setGenreInputs([...genreInputs, ""])}
-                  style={{ marginLeft: "5px" }}
-                >
-                  +
-                </button>
-              )}
-              <button onClick={() => removeGenreFilter(i)} style={{ marginLeft: "5px" }}>
-                -
-              </button>
-              {i === genreInputs.length - 1 && genreResults.length > 0 && (
-                <ul style={dropdownStyle}>
-                  {genreResults.map((genre, idx) => (
-                    <li
-                      key={idx}
-                      onClick={() => doGenreSelect(genre, i)}
-                      style={{ cursor: "pointer", padding: "4px 0", borderBottom: "1px solid #eee" }}
-                    >
-                      {genre}
-                    </li>
-                  ))}
-                </ul>
-              )}
+        {/* artist filter */}
+        {activeFilters.has("artist") && (
+          <div style={filterRowStyle}>
+            <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginBottom: "10px" }}>artists</div>
+            {artistInputs.map((value, i) => (
+              <div key={i} style={{ position: "relative", marginBottom: "8px" }}>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <input
+                    type="text" placeholder="artist name" value={value} autoComplete="off"
+                    onChange={(e) => { const u = [...artistInputs]; u[i] = e.target.value; setArtistInputs(u); }}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  {i === artistInputs.length - 1 && (
+                    <button onClick={() => setArtistInputs([...artistInputs, ""])} style={smallBtn("ghost")}>+</button>
+                  )}
+                  <button onClick={() => removeArtistInput(i)} style={smallBtn("ghost")}>−</button>
+                </div>
+                {i === artistInputs.length - 1 && artistResults.length > 0 && (
+                  <ul style={dropdownStyle}>
+                    {artistResults.map((a) => (
+                      <li key={a.id} onClick={() => doArtistSelect(a, i)}
+                        style={{ padding: "6px 8px", cursor: "pointer", borderRadius: "4px", color: "#fff" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLLIElement).style.backgroundColor = "#383838"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLLIElement).style.backgroundColor = "transparent"; }}>
+                        {a.name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* time period filter */}
+        {activeFilters.has("time period") && (
+          <div style={filterRowStyle}>
+            <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginBottom: "10px" }}>time period</div>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <input type="number" placeholder="start year (e.g. 2000)" value={startYear}
+                onChange={(e) => setStartYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+              <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>—</span>
+              <input type="number" placeholder="end year (e.g. 2012)" value={endYear}
+                onChange={(e) => setEndYear(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
 
-      <div style={{ marginTop: "20px" }}>
-        <button onClick={doSearch} disabled={loading}>
-          {loading ? "searching..." : "go"}
+        {/* genre filter */}
+        {activeFilters.has("genre") && (
+          <div style={filterRowStyle}>
+            <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginBottom: "10px" }}>genres</div>
+            {genreInputs.map((value, i) => (
+              <div key={i} style={{ position: "relative", marginBottom: "8px" }}>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <input
+                    type="text" placeholder="genre name" value={value} autoComplete="off"
+                    onChange={(e) => { const u = [...genreInputs]; u[i] = e.target.value; setGenreInputs(u); }}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  {i === genreInputs.length - 1 && (
+                    <button onClick={() => setGenreInputs([...genreInputs, ""])} style={smallBtn("ghost")}>+</button>
+                  )}
+                  <button onClick={() => removeGenreInput(i)} style={smallBtn("ghost")}>−</button>
+                </div>
+                {i === genreInputs.length - 1 && genreResults.length > 0 && (
+                  <ul style={dropdownStyle}>
+                    {genreResults.map((g, idx) => (
+                      <li key={idx} onClick={() => doGenreSelect(g, i)}
+                        style={{ padding: "6px 8px", cursor: "pointer", borderRadius: "4px", color: "#fff" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLLIElement).style.backgroundColor = "#383838"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLLIElement).style.backgroundColor = "transparent"; }}>
+                        {g}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* search button */}
+        <button
+          onClick={doSearch}
+          disabled={loading}
+          style={{
+            marginTop: "16px",
+            backgroundColor: "var(--accent)",
+            color: "#000",
+            border: "none",
+            borderRadius: "500px",
+            padding: "10px 28px",
+            fontSize: "0.9rem",
+            fontWeight: 700,
+            opacity: loading ? 0.7 : 1,
+          }}
+        >
+          {loading ? "searching..." : "search"}
         </button>
       </div>
 
-      {searchResults.length > 0 && (
-        <div
-          style={{
-            marginTop: "30px",
-            textAlign: "left",
-            width: "60%",
-            marginLeft: "auto",
-            marginRight: "auto",
-          }}
-        >
-          <h3>results ({searchResults.length} total)</h3>
+      {/* message */}
+      {message && (
+        <div style={{
+          marginTop: "16px", padding: "10px 16px", borderRadius: "8px", fontSize: "0.85rem",
+          backgroundColor: message.type === "success" ? "#0d2e1a" : "#2e0d0d",
+          border: `1px solid ${message.type === "success" ? "var(--accent)" : "#ff4d4d"}`,
+          color: message.type === "success" ? "var(--accent)" : "#ff4d4d",
+        }}>
+          {message.text}
+        </div>
+      )}
 
-          <div style={{ marginBottom: "10px", display: "flex", alignItems: "center", gap: "10px" }}>
-            <button onClick={toggleSelectAllOnPage}>
+      {/* results */}
+      {searchResults.length > 0 && (
+        <div style={{ marginTop: "28px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.9rem", color: "var(--muted)" }}>
+              {searchResults.length} results
+            </span>
+            <button onClick={toggleSelectAllOnPage} style={pillBtn(allOnPageSelected)}>
               {allOnPageSelected ? "deselect page" : "select page"}
             </button>
-            <span style={{ fontSize: "0.9rem", color: "#555" }}>
-              page {currentPage + 1} of {totalPages}
-            </span>
-            <button onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 0}>
-              prev
-            </button>
-            <button onClick={() => setCurrentPage((p) => p + 1)} disabled={currentPage >= totalPages - 1}>
-              next
-            </button>
+            {totalPages > 1 && (
+              <>
+                <button onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 0} style={pillBtn(false)}>← prev</button>
+                <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{currentPage + 1} / {totalPages}</span>
+                <button onClick={() => setCurrentPage((p) => p + 1)} disabled={currentPage >= totalPages - 1} style={pillBtn(false)}>next →</button>
+              </>
+            )}
             {selectedTracks.size > 0 && (
-              <span style={{ fontSize: "0.9rem", color: "#555" }}>
+              <span style={{ fontSize: "0.85rem", color: "var(--accent)", fontWeight: 600 }}>
                 {selectedTracks.size} selected
               </span>
             )}
           </div>
 
-          <ul style={{ listStyleType: "none", padding: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
             {currentPageTracks.map((track) => (
-              <li key={track.id} style={{ marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <div
+                key={track.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: "12px",
+                  padding: "8px 10px", borderRadius: "6px",
+                  backgroundColor: selectedTracks.has(track.id) ? "rgba(29,185,84,0.1)" : "transparent",
+                  transition: "background-color 0.1s",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => { if (!selectedTracks.has(track.id)) (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--hover)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = selectedTracks.has(track.id) ? "rgba(29,185,84,0.1)" : "transparent"; }}
+                onClick={() => toggleTrack(track.id)}
+              >
                 <input
                   type="checkbox"
                   checked={selectedTracks.has(track.id)}
                   onChange={() => toggleTrack(track.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ accentColor: "var(--accent)", flexShrink: 0 }}
                 />
-                <span>{track.name} - {track.artists.map((a) => a.name).join(", ")}</span>
+                {/* album art */}
+                <div style={{ width: 40, height: 40, borderRadius: "4px", backgroundColor: "#333", flexShrink: 0, overflow: "hidden" }}>
+                  {track.album_image ? (
+                    <img src={track.album_image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: "1rem" }}>🎵</div>
+                  )}
+                </div>
+                {/* track info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "0.9rem", color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {track.name}
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {track.artists.map((a) => a.name).join(", ")}
+                  </div>
+                </div>
+                {/* preview + yt */}
                 <button
-                  onClick={() => openMiniPlayer(track.name, track.artists.map((a) => a.name))}
-                  style={{ fontSize: "0.75rem", padding: "2px 7px", cursor: "pointer" }}
-                  title="play in mini player"
-                >
-                  ▶
-                </button>
+                  onClick={(e) => { e.stopPropagation(); openMiniPlayer(track.name, track.artists.map((a) => a.name)); }}
+                  style={smallBtn("icon")}
+                  title="mini player"
+                >▶</button>
                 <a
-                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(track.name + " " + track.artists.map(a => a.name).join(" ") + " audio")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ fontSize: "0.75rem", padding: "2px 7px", cursor: "pointer", textDecoration: "none", border: "1px solid #ccc", borderRadius: "3px" }}
+                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(track.name + " " + track.artists.map((a) => a.name).join(" ") + " audio")}`}
+                  target="_blank" rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ ...smallBtn("ghost"), display: "inline-block", color: "var(--muted)", textDecoration: "none" }}
                   title="open on youtube"
-                >
-                  yt
-                </a>
-              </li>
+                >yt</a>
+              </div>
             ))}
-          </ul>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px" }}>
-            <button onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 0}>
-              prev
-            </button>
-            <span style={{ fontSize: "0.9rem", color: "#555" }}>
-              page {currentPage + 1} of {totalPages}
-            </span>
-            <button onClick={() => setCurrentPage((p) => p + 1)} disabled={currentPage >= totalPages - 1}>
-              next
-            </button>
           </div>
-        </div>
-      )}
 
-      {searchResults.length > 0 && (
-        <div style={{ marginTop: "20px" }}>
-          <button onClick={doAddToQueue} disabled={selectedTracks.size === 0}>add to queue</button>{" "}
-          <button onClick={() => { setShowNew(!showNew); setShowExisting(false); }}>
-            make new playlist
-          </button>{" "}
-          <button onClick={() => { setShowExisting(!showExisting); setShowNew(false); }}>
-            add to existing playlist
-          </button>{" "}
-          <button onClick={doRemoveFromLiked} disabled={selectedTracks.size === 0}>remove from liked</button>
-
-          {showNew && (
-            <div style={{ marginTop: "10px" }}>
-              <input
-                type="text"
-                placeholder="enter new playlist name"
-                value={newPlaylistName}
-                onChange={(e) => setNewPlaylistName(e.target.value)}
-              />
-              <button onClick={doCreateNewPlaylist} style={{ marginLeft: "10px" }}>
-                create
-              </button>
-            </div>
-          )}
-
-          {showExisting && (
-            <div style={{ marginTop: "10px" }}>
-              <select
-                value={selectedPlaylistId}
-                onChange={(e) => setSelectedPlaylistId(e.target.value)}
-              >
-                <option value="">select a playlist</option>
-                {playlists.map((pl) => (
-                  <option key={pl.id} value={pl.id}>
-                    {pl.name} ({pl.num_tracks} tracks)
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={doAddToExistingPlaylist}
-                style={{ marginLeft: "10px" }}
-                disabled={!selectedPlaylistId}
-              >
-                add
-              </button>
+          {totalPages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "16px" }}>
+              <button onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 0} style={pillBtn(false)}>← prev</button>
+              <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{currentPage + 1} / {totalPages}</span>
+              <button onClick={() => setCurrentPage((p) => p + 1)} disabled={currentPage >= totalPages - 1} style={pillBtn(false)}>next →</button>
             </div>
           )}
         </div>
       )}
 
-      {message && (
+      {/* action bar (shown when tracks selected) */}
+      {selectedTracks.size > 0 && (
         <div
           style={{
-            marginTop: "10px",
-            color: message.type === "success" ? "green" : "red",
-            fontWeight: "bold",
+            position: "fixed",
+            bottom: "24px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "#282828",
+            border: "1px solid var(--border)",
+            borderRadius: "12px",
+            padding: "12px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+            zIndex: 200,
+            flexWrap: "wrap",
+            justifyContent: "center",
           }}
         >
-          {message.text}
+          <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{selectedTracks.size} selected</span>
+
+          <button onClick={doAddToQueue}
+            style={{ backgroundColor: "var(--accent)", color: "#000", border: "none", borderRadius: "500px", padding: "7px 16px", fontSize: "0.8rem", fontWeight: 700 }}>
+            add to queue
+          </button>
+
+          <button onClick={() => { setShowNew(!showNew); setShowExisting(false); }}
+            style={pillBtn(showNew)}>
+            new playlist
+          </button>
+          <button onClick={() => { setShowExisting(!showExisting); setShowNew(false); }}
+            style={pillBtn(showExisting)}>
+            add to playlist
+          </button>
+          <button onClick={doRemoveFromLiked}
+            style={{ background: "none", border: "1px solid #ff4d4d", borderRadius: "500px", color: "#ff4d4d", padding: "6px 14px", fontSize: "0.8rem", cursor: "pointer" }}>
+            remove from liked
+          </button>
         </div>
       )}
 
-      <br />
-      <br />
-      <button onClick={() => navigate("/")} disabled={loading}>
-        back
-      </button>
+      {/* new playlist inline form */}
+      {showNew && selectedTracks.size > 0 && (
+        <div style={{ position: "fixed", bottom: "86px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#282828", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px 20px", display: "flex", gap: "10px", alignItems: "center", zIndex: 200 }}>
+          <input
+            type="text" placeholder="playlist name" value={newPlaylistName}
+            onChange={(e) => setNewPlaylistName(e.target.value)}
+            style={{ ...inputStyle, width: "220px" }}
+          />
+          <button onClick={doCreateNewPlaylist}
+            style={{ backgroundColor: "var(--accent)", color: "#000", border: "none", borderRadius: "500px", padding: "7px 16px", fontSize: "0.8rem", fontWeight: 700 }}>
+            create
+          </button>
+        </div>
+      )}
+
+      {/* add to existing playlist inline form */}
+      {showExisting && selectedTracks.size > 0 && (
+        <div style={{ position: "fixed", bottom: "86px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#282828", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px 20px", display: "flex", gap: "10px", alignItems: "center", zIndex: 200 }}>
+          <select value={selectedPlaylistId} onChange={(e) => setSelectedPlaylistId(e.target.value)}
+            style={{ ...inputStyle, width: "220px" }}>
+            <option value="">select a playlist</option>
+            {playlists.map((pl) => (
+              <option key={pl.id} value={pl.id}>{pl.name} ({pl.num_tracks})</option>
+            ))}
+          </select>
+          <button onClick={doAddToExistingPlaylist} disabled={!selectedPlaylistId}
+            style={{ backgroundColor: "var(--accent)", color: "#000", border: "none", borderRadius: "500px", padding: "7px 16px", fontSize: "0.8rem", fontWeight: 700, opacity: selectedPlaylistId ? 1 : 0.5 }}>
+            add
+          </button>
+        </div>
+      )}
 
       {miniPlayer && (
-        <MiniPlayer
-          query={miniPlayer.query}
-          trackLabel={miniPlayer.label}
-          onClose={() => setMiniPlayer(null)}
-        />
+        <MiniPlayer query={miniPlayer.query} trackLabel={miniPlayer.label} onClose={() => setMiniPlayer(null)} />
       )}
     </div>
   );

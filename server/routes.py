@@ -6,7 +6,7 @@ import spotipy
 import spotify_helpers
 from scheduler import queue_scheduler
 from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, Genre, track_artist_table, playlist_track_table, saved_track_table, artist_genre_table
-from spotify_helpers import cache_all_music_data, cache_incremental, apply_bundles, get_tracks_by_artists, get_tracks_by_genres, get_tracks_by_release_year, get_playlists
+from spotify_helpers import cache_all_music_data, cache_incremental, apply_bundles, get_tracks_by_artists, get_tracks_by_genres, get_tracks_by_release_year, get_tracks_by_name, get_playlists
 from spotipy import Spotify
 
 routes = Blueprint("routes", __name__)
@@ -70,7 +70,8 @@ def api_get_playlists():
         {
             "id": playlist.id,
             "name": playlist.name,
-            "num_tracks": len(playlist.tracks)
+            "num_tracks": len(playlist.tracks),
+            "image_url": playlist.image_url
         }
         for playlist in user.playlists
     ]
@@ -288,6 +289,7 @@ def api_search_category():
     genres = data.get("genres", [])
     start_year = data.get("start_year")
     end_year = data.get("end_year")
+    song_name = data.get("song_name", "").strip()
     liked_only = data.get("liked_only", False)
     user_id = data.get("user_id")
 
@@ -295,6 +297,12 @@ def api_search_category():
     try:
         track_sets = []
         track_objects = {}
+
+        if song_name:
+            name_tracks = get_tracks_by_name(db, song_name)
+            track_sets.append(set(t.id for t in name_tracks))
+            for t in name_tracks:
+                track_objects[t.id] = t
 
         if artists:
             artist_tracks = get_tracks_by_artists(db, artists)
@@ -339,7 +347,8 @@ def api_search_category():
                 "id": t.id,
                 "name": t.name,
                 "artists": [{"id": a.id, "name": a.name} for a in t.artists],
-                "preview_url": t.preview_url
+                "preview_url": t.preview_url,
+                "album_image": t.album.image_url if t.album else None
             }
             for t in unique_tracks
         ])
@@ -381,18 +390,19 @@ def api_search_artists():
 @routes.route("/api/search_songs", methods=["GET"])
 def api_search_songs():
     try:
-        query = request.args.get("query", "").lower()
+        query = request.args.get("query", "").strip()
+        artist = request.args.get("artist", "").strip()
         db = SessionLocal()
-        
-        if not query:
+
+        if not query and not artist:
             return jsonify([])
-        
-        matches = (
-            db.query(Track)
-            .filter(Track.name.ilike(f"%{query}%"))
-            .limit(10)
-            .all()
-        )
+
+        q = db.query(Track)
+        if query:
+            q = q.filter(Track.name.ilike(f"%{query}%"))
+        if artist:
+            q = q.join(Track.artists).filter(Artist.name.ilike(f"%{artist}%"))
+        matches = q.distinct().all()
         
         return jsonify([
             {
@@ -400,7 +410,8 @@ def api_search_songs():
                 "name": s.name,
                 "album": s.album.name if s.album else None,
                 "artists": [{"id": a.id, "name": a.name} for a in s.artists],
-                "preview_url": s.preview_url
+                "preview_url": s.preview_url,
+                "album_image": s.album.image_url if s.album else None
             }
             for s in matches
         ])
@@ -424,7 +435,8 @@ def api_get_track():
             "id": track.id,
             "name": track.name,
             "artists": [{"id": a.id, "name": a.name} for a in track.artists],
-            "preview_url": track.preview_url
+            "preview_url": track.preview_url,
+            "album_image": track.album.image_url if track.album else None
         })
     finally:
         db.close()

@@ -48,6 +48,7 @@ class Playlist(Base):
     name = Column(String)
     user_id = Column(String, ForeignKey("users.id"))
     snapshot_id = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
 
     user = relationship("User", back_populates="playlists")
     tracks = relationship("Track", secondary=playlist_track_table, back_populates="playlists")
@@ -57,6 +58,7 @@ class Album(Base):
     id = Column(String, primary_key=True)
     name = Column(String)
     release_date = Column(String)
+    image_url = Column(String, nullable=True)
 
     tracks = relationship("Track", back_populates="album")
 
@@ -126,4 +128,12 @@ def init_db():
         playlist_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(playlists)"))]
         if "snapshot_id" not in playlist_cols:
             conn.execute(text("ALTER TABLE playlists ADD COLUMN snapshot_id TEXT"))
+            conn.commit()
+        if "image_url" not in playlist_cols:
+            conn.execute(text("ALTER TABLE playlists ADD COLUMN image_url TEXT"))
+            conn.commit()
+
+        album_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(albums)"))]
+        if "image_url" not in album_cols:
+            conn.execute(text("ALTER TABLE albums ADD COLUMN image_url TEXT"))
             conn.commit()

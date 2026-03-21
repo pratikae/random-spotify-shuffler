@@ -1,14 +1,44 @@
 import React from "react";
 
 const Login: React.FC = () => {
-  const handleLogin = () => {
-    window.location.href = "http://localhost:8888/login";
-  };
-
   return (
-    <div style={{ textAlign: "center", marginTop: "100px" }}>
-      <h2>welcome to random spotify shuffler</h2>
-      <button onClick={handleLogin}>login with spotify</button>
+    <div
+      style={{
+        height: "100vh",
+        backgroundColor: "#121212",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "24px",
+      }}
+    >
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: "3rem", marginBottom: "8px" }}>🎲</div>
+        <h1 style={{ color: "#fff", fontSize: "2rem", fontWeight: 700, margin: 0 }}>shuffler</h1>
+        <p style={{ color: "#b3b3b3", marginTop: "8px", fontSize: "0.95rem" }}>
+          true random shuffle for spotify
+        </p>
+      </div>
+      <button
+        onClick={() => { window.location.href = "http://localhost:8888/login"; }}
+        style={{
+          backgroundColor: "#1DB954",
+          color: "#000",
+          border: "none",
+          borderRadius: "500px",
+          padding: "14px 36px",
+          fontSize: "0.95rem",
+          fontWeight: 700,
+          letterSpacing: "0.05em",
+          cursor: "pointer",
+          transition: "background-color 0.2s, transform 0.1s",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1ed760")}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1DB954")}
+      >
+        log in with spotify
+      </button>
     </div>
   );
 };
