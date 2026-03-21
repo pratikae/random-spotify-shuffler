@@ -6,7 +6,7 @@ import spotipy
 import spotify_helpers
 from scheduler import queue_scheduler
 from database import SessionLocal, User, Playlist, Track, Album, Artist, PodcastEpisode, Show, Bundle, Genre, track_artist_table, playlist_track_table, saved_track_table, artist_genre_table
-from spotify_helpers import cache_all_music_data, apply_bundles, get_tracks_by_artists, get_tracks_by_genres, get_tracks_by_release_year, get_playlists
+from spotify_helpers import cache_all_music_data, cache_incremental, apply_bundles, get_tracks_by_artists, get_tracks_by_genres, get_tracks_by_release_year, get_playlists
 from spotipy import Spotify
 
 routes = Blueprint("routes", __name__)
@@ -721,15 +721,30 @@ def api_cache_refresh():
     user_id = data.get("user_id")
     if not user_id:
         return jsonify({"error": "no user_id"}), 400
-    
+
+    sp = get_spotify_client(token=data.get("token"))
+    print("running incremental cache refresh")
+    cache_incremental(sp, user_id)
+    print("incremental cache complete")
+
+    return jsonify({"message": "cache refreshed"})
+
+
+@routes.route("/api/cache/full_refresh", methods=["POST"])
+def api_cache_full_refresh():
+    """Full clear + re-cache, for when something is badly out of sync."""
+    data = request.get_json()
+    user_id = data.get("user_id")
+    if not user_id:
+        return jsonify({"error": "no user_id"}), 400
+
     sp = get_spotify_client(token=data.get("token"))
     api_cache_clear(sp, user_id)
-    
-    print("refreshing cache")
+    print("full cache refresh started")
     cache_all_music_data(sp, user_id)
-    print("cache refreshed")
-    
-    return jsonify({"message": "cache cleared and refreshed, reload (playlists may take a while to appear, reload until they appear)"})
+    print("full cache refresh complete")
+
+    return jsonify({"message": "full cache refresh complete"})
 
 @routes.route("/api/cache/clear", methods=["POST"])
 def api_cache_clear(sp, user_id):

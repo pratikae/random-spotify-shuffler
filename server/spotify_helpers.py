@@ -91,7 +91,7 @@ def cache_all_music_data(sp, user_id):
         
         playlist = db.query(Playlist).filter_by(id=playlist_id).first()
         if not playlist:
-            playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user)
+            playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user, snapshot_id=playlist_obj.get("snapshot_id"))
             db.add(playlist)
             db.flush()
         
@@ -122,8 +122,179 @@ import threading
 def cache_playlists_async(sp, user_id):
     def worker():
         cache_all_music_data(sp, user_id)
-    
+
     threading.Thread(target=worker).start()
+
+
+def cache_incremental(sp, user_id):
+    """Smart incremental cache: only fetches what changed since last cache."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter_by(id=user_id).first()
+        if not user:
+            db.close()
+            cache_all_music_data(sp, user_id)
+            return
+
+        _sync_saved_tracks(sp, user, db)
+        _sync_playlists(sp, user, db)
+
+        db.commit()
+        print("incremental cache complete")
+    except Exception as e:
+        db.rollback()
+        print(f"incremental cache error: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def _sync_saved_tracks(sp, user, db):
+    """Add new liked songs and remove any that were unliked."""
+    first_page = sp.current_user_saved_tracks(limit=1)
+    spotify_total = first_page["total"]
+    cached_ids = set(t.id for t in user.saved_tracks)
+    cached_total = len(cached_ids)
+
+    if spotify_total == cached_total:
+        print(f"saved tracks unchanged ({spotify_total}), skipping")
+        return
+
+    print(f"saved tracks changed: cached={cached_total}, spotify={spotify_total}")
+
+    if spotify_total > cached_total:
+        # only fetch new tracks — spotify returns newest first, stop when we hit cached ones
+        new_track_data = []
+        results = sp.current_user_saved_tracks(limit=50)
+        while results:
+            all_in_batch_cached = True
+            for item in results["items"]:
+                track = item.get("track")
+                if not track or not track.get("id"):
+                    continue
+                if track["id"] not in cached_ids:
+                    all_in_batch_cached = False
+                    new_track_data.append(track)
+            if all_in_batch_cached or not results["next"]:
+                break
+            results = sp.next(results)
+
+        print(f"fetching {len(new_track_data)} new saved tracks")
+        new_artist_ids = {a["id"] for t in new_track_data for a in t.get("artists", [])}
+        artist_details = fetch_artist_genres(sp, new_artist_ids) if new_artist_ids else {}
+
+        for track_data in new_track_data:
+            for artist_data in track_data.get("artists", []):
+                if artist_data["id"] in artist_details:
+                    artist_data.update(artist_details[artist_data["id"]])
+            track = get_or_create_track(track_data, db)
+            if track and track not in user.saved_tracks:
+                user.saved_tracks.append(track)
+
+    else:
+        # songs were removed — fetch full id set from spotify and reconcile
+        print("songs removed, reconciling saved tracks")
+        all_spotify_ids = set()
+        results = sp.current_user_saved_tracks(limit=50)
+        while results:
+            for item in results["items"]:
+                track = item.get("track")
+                if track and track.get("id"):
+                    all_spotify_ids.add(track["id"])
+            if not results["next"]:
+                break
+            results = sp.next(results)
+
+        removed_ids = cached_ids - all_spotify_ids
+        added_ids = all_spotify_ids - cached_ids
+
+        # remove unliked tracks from user's saved list (don't delete the track itself)
+        if removed_ids:
+            user.saved_tracks = [t for t in user.saved_tracks if t.id not in removed_ids]
+            print(f"removed {len(removed_ids)} unliked tracks")
+
+        # add any new ones
+        if added_ids:
+            new_track_data = []
+            results = sp.current_user_saved_tracks(limit=50)
+            while results:
+                for item in results["items"]:
+                    track = item.get("track")
+                    if track and track.get("id") in added_ids:
+                        new_track_data.append(track)
+                if not results["next"]:
+                    break
+                results = sp.next(results)
+
+            new_artist_ids = {a["id"] for t in new_track_data for a in t.get("artists", [])}
+            artist_details = fetch_artist_genres(sp, new_artist_ids) if new_artist_ids else {}
+            for track_data in new_track_data:
+                for artist_data in track_data.get("artists", []):
+                    if artist_data["id"] in artist_details:
+                        artist_data.update(artist_details[artist_data["id"]])
+                track = get_or_create_track(track_data, db)
+                if track and track not in user.saved_tracks:
+                    user.saved_tracks.append(track)
+
+
+def _sync_playlists(sp, user, db):
+    """Add/update changed playlists using snapshot_id, remove deleted ones."""
+    from database import Playlist
+    spotify_playlists = get_playlists(sp)
+    spotify_ids = {p["id"] for p in spotify_playlists}
+
+    # remove playlists deleted from spotify
+    for playlist in list(user.playlists):
+        if playlist.id not in spotify_ids:
+            print(f"removing deleted playlist: {playlist.name}")
+            db.delete(playlist)
+
+    for playlist_obj in spotify_playlists:
+        playlist_id = playlist_obj["id"]
+        snapshot_id = playlist_obj.get("snapshot_id")
+
+        playlist = db.query(Playlist).filter_by(id=playlist_id).first()
+
+        if playlist and playlist.snapshot_id == snapshot_id:
+            print(f"playlist '{playlist.name}' unchanged, skipping")
+            continue
+
+        print(f"syncing playlist '{playlist_obj['name']}'")
+        playlist_tracks = get_songs(sp, playlist_id)
+
+        if not playlist:
+            playlist = Playlist(id=playlist_id, name=playlist_obj["name"], user=user, snapshot_id=snapshot_id)
+            db.add(playlist)
+            db.flush()
+        else:
+            playlist.name = playlist_obj["name"]
+            playlist.snapshot_id = snapshot_id
+            playlist.tracks.clear()
+            db.flush()
+
+        # only fetch artist details for artists not already in db
+        new_artist_ids = set()
+        for track_data in playlist_tracks:
+            if not track_data or track_data.get("type") != "track":
+                continue
+            for artist_data in track_data.get("artists", []):
+                from database import Artist
+                existing = db.get(Artist, artist_data["id"])
+                if not existing or not existing.genres:
+                    new_artist_ids.add(artist_data["id"])
+
+        artist_details = fetch_artist_genres(sp, new_artist_ids) if new_artist_ids else {}
+
+        for track_data in playlist_tracks:
+            if not track_data or track_data.get("type") != "track" or not track_data.get("id"):
+                continue
+            for artist_data in track_data.get("artists", []):
+                if artist_data["id"] in artist_details:
+                    artist_data.update(artist_details[artist_data["id"]])
+            with db.no_autoflush:
+                track = get_or_create_track(track_data, db)
+                if track and track not in playlist.tracks:
+                    playlist.tracks.append(track)
     
 def get_or_create_album(album_data, db):
     album_id = album_data.get("id")

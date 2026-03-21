@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, Table, Date, Boolean
+from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, Table, Date, Boolean, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
@@ -47,6 +47,7 @@ class Playlist(Base):
     id = Column(String, primary_key=True)
     name = Column(String)
     user_id = Column(String, ForeignKey("users.id"))
+    snapshot_id = Column(String, nullable=True)
 
     user = relationship("User", back_populates="playlists")
     tracks = relationship("Track", secondary=playlist_track_table, back_populates="playlists")
@@ -115,13 +116,14 @@ class Bundle(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
-    # migrate: add preview_url column if it doesn't exist yet
+    from sqlalchemy import text
     with engine.connect() as conn:
-        cols = [row[1] for row in conn.execute(
-            __import__("sqlalchemy").text("PRAGMA table_info(tracks)")
-        )]
-        if "preview_url" not in cols:
-            conn.execute(__import__("sqlalchemy").text(
-                "ALTER TABLE tracks ADD COLUMN preview_url TEXT"
-            ))
+        track_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(tracks)"))]
+        if "preview_url" not in track_cols:
+            conn.execute(text("ALTER TABLE tracks ADD COLUMN preview_url TEXT"))
+            conn.commit()
+
+        playlist_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(playlists)"))]
+        if "snapshot_id" not in playlist_cols:
+            conn.execute(text("ALTER TABLE playlists ADD COLUMN snapshot_id TEXT"))
             conn.commit()
