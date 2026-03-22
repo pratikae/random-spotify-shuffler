@@ -15,9 +15,9 @@ const Login: React.FC = () => {
     >
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: "3rem", marginBottom: "8px" }}>🎲</div>
-        <h1 style={{ color: "#fff", fontSize: "2rem", fontWeight: 700, margin: 0 }}>shuffler</h1>
+        <h1 style={{ color: "#fff", fontSize: "2rem", fontWeight: 700, margin: 0 }}>protify</h1>
         <p style={{ color: "#b3b3b3", marginTop: "8px", fontSize: "0.95rem" }}>
-          true random shuffle for spotify
+          extended features for spotify
         </p>
       </div>
       <button

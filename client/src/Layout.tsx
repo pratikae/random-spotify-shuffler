@@ -78,7 +78,7 @@ function Layout({ userId, token, userName, onLogout, children }: LayoutProps) {
         {/* logo */}
         <div style={{ marginBottom: "28px", paddingLeft: "4px" }}>
           <span style={{ fontSize: "1.3rem", fontWeight: 700, color: "#fff", letterSpacing: "-0.5px" }}>
-            🎲🔥 protify
+            🎲 protify
           </span>
         </div>
 
