@@ -19,7 +19,7 @@ function Layout({ userId, token, userName, onLogout, children }: LayoutProps) {
     setRefreshing(true);
     setRefreshMsg("");
     try {
-      await axios.post("http://localhost:8888/api/cache/refresh", { user_id: userId, token });
+      await axios.post("/api/cache/refresh", { user_id: userId, token });
       setRefreshMsg("synced");
       setTimeout(() => setRefreshMsg(""), 3000);
     } catch {
@@ -35,7 +35,7 @@ function Layout({ userId, token, userName, onLogout, children }: LayoutProps) {
     setFullRefreshing(true);
     setRefreshMsg("");
     try {
-      await axios.post("http://localhost:8888/api/cache/full_refresh", { user_id: userId, token });
+      await axios.post("/api/cache/full_refresh", { user_id: userId, token });
       setRefreshMsg("full sync done");
       setTimeout(() => setRefreshMsg(""), 4000);
     } catch {

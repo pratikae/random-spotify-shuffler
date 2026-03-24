@@ -176,13 +176,13 @@ function Bundles({ userId, token }: BundleProps) {
   useEffect(() => {
     const fetchBundles = async () => {
       try {
-        const res = await axios.get<Bundle[]>(`http://localhost:8888/api/get_bundles?user_id=${userId}`);
+        const res = await axios.get<Bundle[]>(`/api/get_bundles?user_id=${userId}`);
         const bundlesData = res.data;
         const tracksToFetch = new Set<string>();
         bundlesData.forEach((b) => { tracksToFetch.add(b.intro_song_id); tracksToFetch.add(b.main_song_id); });
         const trackDetails = await Promise.all(
           Array.from(tracksToFetch).map((id) =>
-            axios.get<Track>(`http://localhost:8888/api/get_track?id=${id}`).then((r) => r.data)
+            axios.get<Track>(`/api/get_track?id=${id}`).then((r) => r.data)
           )
         );
         const trackMap = new Map(trackDetails.map((t) => [t.id, t]));
@@ -200,7 +200,7 @@ function Bundles({ userId, token }: BundleProps) {
     const params = new URLSearchParams();
     if (introQuery) params.set("query", introQuery);
     if (introArtistQuery) params.set("artist", introArtistQuery);
-    axios.get<Track[]>(`http://localhost:8888/api/search_songs?${params}`)
+    axios.get<Track[]>(`/api/search_songs?${params}`)
       .then((r) => setIntroResults(r.data))
       .catch(() => setIntroResults([]));
   }, [introQuery, introArtistQuery]);
@@ -211,19 +211,19 @@ function Bundles({ userId, token }: BundleProps) {
     const params = new URLSearchParams();
     if (mainQuery) params.set("query", mainQuery);
     if (mainArtistQuery) params.set("artist", mainArtistQuery);
-    axios.get<Track[]>(`http://localhost:8888/api/search_songs?${params}`)
+    axios.get<Track[]>(`/api/search_songs?${params}`)
       .then((r) => setMainResults(r.data))
       .catch(() => setMainResults([]));
   }, [mainQuery, mainArtistQuery]);
 
   const doCreateBundle = async () => {
     try {
-      const res = await axios.post<Bundle>(`http://localhost:8888/api/create_bundle`, {
+      const res = await axios.post<Bundle>(`/api/create_bundle`, {
         user_id: userId, intro_song_id: introId, main_song_id: mainId, strict,
       });
       const [introSong, mainSong] = await Promise.all([
-        axios.get<Track>(`http://localhost:8888/api/get_track?id=${res.data.intro_song_id}`).then((r) => r.data),
-        axios.get<Track>(`http://localhost:8888/api/get_track?id=${res.data.main_song_id}`).then((r) => r.data),
+        axios.get<Track>(`/api/get_track?id=${res.data.intro_song_id}`).then((r) => r.data),
+        axios.get<Track>(`/api/get_track?id=${res.data.main_song_id}`).then((r) => r.data),
       ]);
       setBundles([...bundles, { ...res.data, intro_song: introSong, main_song: mainSong }]);
       setShowCreateForm(false);
@@ -238,7 +238,7 @@ function Bundles({ userId, token }: BundleProps) {
 
   const toggleStrict = async (bundleId: number, newStrict: boolean) => {
     try {
-      await axios.patch(`http://localhost:8888/api/bundles/${bundleId}`, { strict: newStrict });
+      await axios.patch(`/api/bundles/${bundleId}`, { strict: newStrict });
       setBundles((prev) => prev.map((b) => (b.id === bundleId ? { ...b, strict: newStrict } : b)));
     } catch {
       setMessage("failed to update strict setting");
@@ -247,7 +247,7 @@ function Bundles({ userId, token }: BundleProps) {
 
   const deleteBundle = async (bundleId: number) => {
     try {
-      await axios.delete(`http://localhost:8888/api/bundles/${bundleId}`);
+      await axios.delete(`/api/bundles/${bundleId}`);
       setBundles((prev) => prev.filter((b) => b.id !== bundleId));
     } catch {
       setMessage("failed to delete bundle");

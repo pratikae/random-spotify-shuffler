@@ -1,16 +1,18 @@
 import os
-from flask import Flask
+from flask import Flask, send_from_directory
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from spotipy.oauth2 import SpotifyOAuth
 from database import init_db, SessionLocal, User, Bundle
 from routes import routes
-from scheduler import queue_scheduler 
+from scheduler import queue_scheduler
 
 load_dotenv()
 init_db()
 
-app = Flask(__name__)
+CLIENT_BUILD = os.path.join(os.path.dirname(__file__), "..", "client", "build")
+
+app = Flask(__name__, static_folder=CLIENT_BUILD, static_url_path="/")
 
 from flask_cors import CORS
 CORS(app)
@@ -26,5 +28,13 @@ queue_scheduler.start()
 
 app.register_blueprint(routes)
 
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react(path):
+    if path and os.path.exists(os.path.join(CLIENT_BUILD, path)):
+        return send_from_directory(CLIENT_BUILD, path)
+    return send_from_directory(CLIENT_BUILD, "index.html")
+
 if __name__ == "__main__":
-    app.run(port=8888, debug=True)
+    port = int(os.getenv("PORT", 8888))
+    app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG", "false").lower() == "true")

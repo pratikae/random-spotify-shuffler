@@ -21,7 +21,7 @@ const Login: React.FC = () => {
         </p>
       </div>
       <button
-        onClick={() => { window.location.href = "http://localhost:8888/login"; }}
+        onClick={() => { window.location.href = "/login"; }}
         style={{
           backgroundColor: "#1DB954",
           color: "#000",

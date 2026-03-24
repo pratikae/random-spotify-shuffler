@@ -50,8 +50,9 @@ def callback():
         print("caching new user...")
         cache_all_music_data(sp, user_id)
     
+    frontend_url = os.getenv("FRONTEND_URL", "")
     return redirect(
-        f"http://localhost:3000/?user_id={user_id}&display_name={quote(display_name)}&token={access_token}"
+        f"{frontend_url}/?user_id={user_id}&display_name={quote(display_name)}&token={access_token}"
     )
 
 @routes.route("/api/get_playlists", methods=["GET"])

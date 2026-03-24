@@ -110,14 +110,14 @@ function Search({ userId, token }: SearchProps) {
 
   useEffect(() => {
     if (!userId) return;
-    axios.get(`http://localhost:8888/api/get_genres?user_id=${userId}`)
+    axios.get(`/api/get_genres?user_id=${userId}`)
       .then((r) => setAllGenres(r.data.all_genres || []))
       .catch(() => {});
   }, [userId]);
 
   useEffect(() => {
     if (!showExisting || !token || !userId) return;
-    axios.get<Playlist[]>(`http://localhost:8888/api/get_playlists`, { params: { user_id: userId } })
+    axios.get<Playlist[]>(`/api/get_playlists`, { params: { user_id: userId } })
       .then((r) => setPlaylists(r.data))
       .catch(() => setPlaylists([]));
   }, [showExisting, token, userId]);
@@ -126,7 +126,7 @@ function Search({ userId, token }: SearchProps) {
     if (artistJustSelected.current) { artistJustSelected.current = false; return; }
     const last = artistInputs[artistInputs.length - 1];
     if (last.length < 2) { setArtistResults([]); return; }
-    axios.get<Artist[]>(`http://localhost:8888/api/search_artists?query=${encodeURIComponent(last)}`)
+    axios.get<Artist[]>(`/api/search_artists?query=${encodeURIComponent(last)}`)
       .then((r) => setArtistResults(r.data))
       .catch(() => setArtistResults([]));
   }, [artistInputs]);
@@ -191,7 +191,7 @@ function Search({ userId, token }: SearchProps) {
       if (hasArtist) payload.artists = filledArtists;
       if (hasTime) { payload.start_year = startYear; payload.end_year = endYear; }
       if (hasGenre) payload.genres = filledGenres;
-      const res = await axios.post<Track[]>("http://localhost:8888/api/search_category", payload);
+      const res = await axios.post<Track[]>("/api/search_category", payload);
       setSearchResults(res.data);
       setSelectedTracks(new Set());
       setCurrentPage(0);
@@ -221,7 +221,7 @@ function Search({ userId, token }: SearchProps) {
 
   const doAddToQueue = async () => {
     try {
-      await axios.post("http://localhost:8888/api/queue", { track_ids: Array.from(selectedTracks), token });
+      await axios.post("/api/queue", { track_ids: Array.from(selectedTracks), token });
       setMessage({ text: "added to queue", type: "success" });
     } catch {
       setMessage({ text: "error adding to queue", type: "error" });
@@ -231,7 +231,7 @@ function Search({ userId, token }: SearchProps) {
   const doCreateNewPlaylist = async () => {
     if (!newPlaylistName.trim()) return;
     try {
-      await axios.post("http://localhost:8888/api/playlist/new", {
+      await axios.post("/api/playlist/new", {
         name: newPlaylistName.trim(), track_ids: Array.from(selectedTracks), token, user_id: userId,
       });
       setMessage({ text: "playlist created", type: "success" });
@@ -244,7 +244,7 @@ function Search({ userId, token }: SearchProps) {
   const doAddToExistingPlaylist = async () => {
     if (!selectedPlaylistId) return;
     try {
-      await axios.post("http://localhost:8888/api/playlist/add_tracks", {
+      await axios.post("/api/playlist/add_tracks", {
         playlist_id: selectedPlaylistId, track_ids: Array.from(selectedTracks), token,
       });
       setMessage({ text: "tracks added to playlist", type: "success" });
@@ -256,7 +256,7 @@ function Search({ userId, token }: SearchProps) {
 
   const doRemoveFromLiked = async () => {
     try {
-      await axios.post("http://localhost:8888/api/remove_liked", {
+      await axios.post("/api/remove_liked", {
         track_ids: Array.from(selectedTracks), token, user_id: userId,
       });
       setMessage({ text: "removed from liked songs", type: "success" });

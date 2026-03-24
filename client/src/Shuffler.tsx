@@ -31,7 +31,7 @@ function Shuffler({ userId, token }: ShufflerProps) {
   useEffect(() => {
     const fetchPlaylists = async () => {
       try {
-        const res = await axios.get(`http://localhost:8888/api/get_playlists?user_id=${userId}`);
+        const res = await axios.get(`/api/get_playlists?user_id=${userId}`);
         setPlaylists(res.data);
       } catch {
         setMessage({ text: "failed to load playlists", type: "error" });
@@ -60,7 +60,7 @@ function Shuffler({ userId, token }: ShufflerProps) {
     if (choice === "2" && playlistId) payload.playlist_id = playlistId;
 
     try {
-      const res = await axios.post("http://localhost:8888/api/shuffle", payload);
+      const res = await axios.post("/api/shuffle", payload);
       setMessage({ text: res.data.message, type: "success" });
     } catch {
       setMessage({ text: "error shuffling — is spotify open?", type: "error" });

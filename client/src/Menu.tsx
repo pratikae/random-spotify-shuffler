@@ -20,7 +20,7 @@ const Menu: React.FC<MenuProps> = ({ userName, userId, token, onLogout }) => {
     setMessage("");
     try {
       const res = await axios.post(
-        "http://localhost:8888/api/cache/refresh",
+        "/api/cache/refresh",
         { user_id: userId, token },
         { headers: { "Content-Type": "application/json" } }
       );
