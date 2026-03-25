@@ -23,7 +23,7 @@ const Login: React.FC = () => {
       <button
         onClick={() => { window.location.href = "/login"; }}
         style={{
-          backgroundColor: "#1DB954",
+          backgroundColor: "#af69ff",
           color: "#000",
           border: "none",
           borderRadius: "500px",
@@ -34,8 +34,8 @@ const Login: React.FC = () => {
           cursor: "pointer",
           transition: "background-color 0.2s, transform 0.1s",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1ed760")}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1DB954")}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#c28aff")}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#af69ff")}
       >
         log in with spotify
       </button>

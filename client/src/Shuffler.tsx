@@ -94,7 +94,7 @@ function Shuffler({ userId, token }: ShufflerProps) {
           position: "absolute",
           top: "8px",
           right: "8px",
-          background: pinned ? "rgba(29,185,84,0.85)" : "rgba(0,0,0,0.6)",
+          background: pinned ? "rgba(175,105,255,0.85)" : "rgba(0,0,0,0.6)",
           border: "none",
           borderRadius: "50%",
           width: "26px",
@@ -205,7 +205,7 @@ function Shuffler({ userId, token }: ShufflerProps) {
             marginBottom: "20px",
             padding: "10px 16px",
             borderRadius: "8px",
-            backgroundColor: message.type === "success" ? "#0d2e1a" : "#2e0d0d",
+            backgroundColor: message.type === "success" ? "#1e0d2e" : "#2e0d0d",
             border: `1px solid ${message.type === "success" ? "var(--accent)" : "#ff4d4d"}`,
             color: message.type === "success" ? "var(--accent)" : "#ff4d4d",
             fontSize: "0.9rem",
@@ -245,7 +245,7 @@ function Shuffler({ userId, token }: ShufflerProps) {
             <div
               style={{
                 width: "100%", paddingBottom: "100%", borderRadius: "4px",
-                background: "linear-gradient(135deg, #450af5, #c4efd9)",
+                background: "linear-gradient(135deg, #fc88f1, #ffb3f6)",
                 marginBottom: "12px", position: "relative", overflow: "hidden",
               }}
             >
@@ -265,7 +265,7 @@ function Shuffler({ userId, token }: ShufflerProps) {
             <div
               style={{
                 width: "100%", paddingBottom: "100%", borderRadius: "4px",
-                background: "linear-gradient(135deg, #1DB954, #191414)",
+                background: "linear-gradient(135deg, #af69ff, #191414)",
                 marginBottom: "12px", position: "relative", overflow: "hidden",
               }}
             >
