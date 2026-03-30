@@ -117,7 +117,7 @@ class Bundle(Base):
     user = relationship("User", back_populates="bundles")
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine, checkfirst=True)
     from sqlalchemy import text
     with engine.connect() as conn:
         track_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(tracks)"))]
