@@ -1,6 +1,6 @@
-# Spotify Shuffler
+# Protify Shuffle
 
-A web app that extends Spotify with features the native client lacks — true random shuffle, playlist bundling, and genre/metadata-based search.
+A web app that extends Spotify with features the native client lacks - true random shuffle, playlist bundling, and genre/metadata-based search.
 
 ## Features
 
